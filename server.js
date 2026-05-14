@@ -18,6 +18,7 @@ const aiProvider = process.env.GROQ_API_KEY
   ? {
       name: "groq",
       model: groqModel,
+      kind: "chat.completions",
       client: new OpenAI({
         apiKey: process.env.GROQ_API_KEY,
         baseURL: "https://api.groq.com/openai/v1"
@@ -27,6 +28,7 @@ const aiProvider = process.env.GROQ_API_KEY
     ? {
         name: "openai",
         model: "gpt-4.1-mini",
+        kind: "responses",
         client: new OpenAI({
           apiKey: process.env.OPENAI_API_KEY
         })
@@ -37,8 +39,91 @@ app.use(express.json({ limit: "2mb" }));
 app.use(express.static(path.join(__dirname)));
 
 app.get("/health", (_req, res) => {
-  res.json({ ok: true });
+  res.json({
+    ok: true,
+    provider: aiProvider ? aiProvider.name : "fallback"
+  });
 });
+
+async function requestAiJson(prompt) {
+  if (!aiProvider) {
+    throw new Error("AI_PROVIDER_MISSING");
+  }
+
+  if (aiProvider.kind === "chat.completions") {
+    const completion = await aiProvider.client.chat.completions.create({
+      model: aiProvider.model,
+      temperature: 0.7,
+      messages: [
+        {
+          role: "system",
+          content: "Eres un asistente pedagogico para clases en vivo. Ayudas a un docente a explicar mejor, dar ejemplos y crear ejercicios claros."
+        },
+        {
+          role: "user",
+          content: prompt
+        }
+      ]
+    });
+
+    return completion.choices?.[0]?.message?.content || "";
+  }
+
+  const response = await aiProvider.client.responses.create({
+    model: aiProvider.model,
+    input: [
+      {
+        role: "system",
+        content: "Eres un asistente pedagogico para clases en vivo. Ayudas a un docente a explicar mejor, dar ejemplos y crear ejercicios claros."
+      },
+      {
+        role: "user",
+        content: prompt
+      }
+    ]
+  });
+
+  return response.output_text || "";
+}
+
+function parseAiResponse(text) {
+  const cleaned = String(text || "").trim();
+  if (!cleaned) {
+    throw new Error("AI_EMPTY_RESPONSE");
+  }
+
+  const withoutFences = cleaned
+    .replace(/^```json\s*/i, "")
+    .replace(/^```\s*/i, "")
+    .replace(/\s*```$/, "")
+    .trim();
+
+  const candidates = [withoutFences];
+  const firstBrace = withoutFences.indexOf("{");
+  const lastBrace = withoutFences.lastIndexOf("}");
+  if (firstBrace !== -1 && lastBrace > firstBrace) {
+    candidates.push(withoutFences.slice(firstBrace, lastBrace + 1));
+  }
+
+  for (const candidate of candidates) {
+    try {
+      const parsed = JSON.parse(candidate);
+      if (parsed && typeof parsed === "object") {
+        return {
+          title: parsed.title || "Resultado IA",
+          body: parsed.body || candidate
+        };
+      }
+    } catch (_error) {
+      continue;
+    }
+  }
+
+  return {
+    title: "Resultado IA",
+    body: withoutFences
+  };
+}
 
 function buildFallbackAssistantResponse(action, payload) {
   const subject = payload.subjectName || "la materia actual";
@@ -134,6 +219,7 @@ app.post("/api/ai-assist", async (req, res) => {
   if (!aiProvider) {
     res.json({
       mode: "fallback",
+      reason: "No hay proveedor de IA configurado en el servidor.",
       ...buildFallbackAssistantResponse(action, {
         subjectName,
         lessonTitle,
@@ -180,30 +266,22 @@ app.post("/api/ai-assist", async (req, res) => {
       "Si generas un ejercicio, procura que parezca de libro clasico: formal, limpio, retador pero resoluble."
     ].join("\n");
 
-    const response = await aiProvider.client.responses.create({
-      model: aiProvider.model,
-      input: [
-        {
-          role: "system",
-          content: "Eres un asistente pedagogico para clases en vivo. Ayudas a un docente a explicar mejor, dar ejemplos y crear ejercicios claros."
-        },
-        {
-          role: "user",
-          content: prompt
-        }
-      ]
-    });
+    const text = await requestAiJson(prompt);
+    if (!text.trim()) {
+      throw new Error("AI_EMPTY_RESPONSE");
+    }
 
-    const text = response.output_text || "";
-    const parsed = JSON.parse(text);
+    const parsed = parseAiResponse(text);
     res.json({
       mode: aiProvider.name,
       title: parsed.title,
-      body: parsed.body
+      body: parsed.body,
+      reason: `Respuesta generada con ${aiProvider.name}.`
     });
-  } catch (_error) {
+  } catch (error) {
     res.json({
       mode: "fallback",
+      reason: `La IA real fallo y se uso respaldo local. Motivo: ${error.message}`,
       ...buildFallbackAssistantResponse(action, {
         subjectName,
         lessonTitle,

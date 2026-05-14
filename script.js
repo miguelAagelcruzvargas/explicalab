@@ -403,6 +403,9 @@ async function runAssistant(action) {
     return;
   }
 
+  quickAiButtons.forEach((button) => {
+    button.disabled = true;
+  });
   assistantStatus.textContent = "Generando contenido...";
   assistantTitle.textContent = "Pensando";
   renderAssistantContent("CONTENIDO\nPreparando respuesta.");
@@ -419,7 +422,17 @@ async function runAssistant(action) {
       })
     });
 
-    const data = await response.json();
+    let data;
+    try {
+      data = await response.json();
+    } catch (_error) {
+      throw new Error("El servidor devolvio una respuesta invalida.");
+    }
+
+    if (!response.ok) {
+      throw new Error(data?.error || "La solicitud a la IA no pudo completarse.");
+    }
+
     assistantMode.textContent = data.mode === "groq"
       ? "Groq activo"
       : data.mode === "openai"
@@ -427,7 +440,7 @@ async function runAssistant(action) {
         : "Modo local";
     assistantTitle.textContent = data.title || "Resultado";
     renderAssistantContent(data.body || "No se genero contenido.");
-    assistantStatus.textContent = "Contenido generado.";
+    assistantStatus.textContent = data.reason || "Contenido generado.";
 
     if (action === "generate-problem" || action === "generate-variant") {
       exerciseTitleInput.value = data.title || exerciseTitleInput.value;
@@ -436,11 +449,15 @@ async function runAssistant(action) {
       exercisePromptInput.value = formatMathText(exerciseSection ? exerciseSection.body : data.body || exercisePromptInput.value);
       syncExerciseContent();
     }
-  } catch (_error) {
+  } catch (error) {
     assistantMode.textContent = "Modo local";
     assistantTitle.textContent = "Sin respuesta";
-    renderAssistantContent("CONTENIDO\nNo pude generar contenido en este momento.");
-    assistantStatus.textContent = "La generacion fallo.";
+    renderAssistantContent(`CONTENIDO\nNo pude generar contenido en este momento.\n\nDETALLE\n${error.message || "Error desconocido."}`);
+    assistantStatus.textContent = error.message || "La generacion fallo.";
+  } finally {
+    quickAiButtons.forEach((button) => {
+      button.disabled = false;
+    });
   }
 }
 
