@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="es">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -8,7 +9,10 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
 </head>
+
 <body>
   <div class="app-shell">
     <header class="topbar">
@@ -16,160 +20,209 @@
         <p class="eyebrow">Aula simple</p>
         <h1>Pizarra y generador de problemas</h1>
       </div>
-      <span class="role-chip" id="workspace-role">Vista libre</span>
+      <div style="display: flex; gap: 10px; align-items: center;">
+        <button class="button secondary teacher-only" id="toggle-board-visibility" type="button">Ocultar
+          pizarra</button>
+        <span class="role-chip" id="workspace-role">Vista libre</span>
+      </div>
     </header>
 
-    <section class="join-card">
-      <label class="field">
-        <span>Tu nombre</span>
-        <input id="landing-user-name" type="text" placeholder="Escribe tu nombre">
-      </label>
-      <label class="field">
-        <span>Codigo de sala</span>
-        <input id="landing-room-id" type="text" placeholder="Ejemplo: algebra-101">
-      </label>
-      <div class="join-actions">
-        <button class="button primary" id="landing-join-room" type="button">Entrar a sala</button>
-        <button class="button secondary" id="copy-room-link" type="button">Copiar link</button>
-        <button class="button secondary" id="toggle-audio" type="button">Silenciar micro</button>
-        <button class="button danger" id="leave-room" type="button">Salir de sala</button>
-      </div>
-      <p class="status-text" id="room-status">Escribe tu nombre y un codigo de sala para empezar.</p>
-    </section>
-
-    <section class="audio-card">
-      <div class="section-head">
-        <div>
-          <p class="eyebrow">Audio</p>
-          <h2>Microfono en tiempo real</h2>
-        </div>
-        <span class="status-chip" id="audio-state">Micro apagado</span>
-      </div>
-      <p class="status-text" id="audio-status">El micro se activa al entrar a la sala. El primero sera maestro y el segundo estudiante.</p>
-      <audio id="remote-audio" autoplay></audio>
-    </section>
-
-    <section class="chat-card">
-      <div class="section-head">
-        <div>
-          <p class="eyebrow">Chat</p>
-          <h2>Mensajes rapidos</h2>
-        </div>
-        <span class="status-chip" id="chat-state">Sin mensajes</span>
-      </div>
-      <div class="chat-feed" id="chat-feed">
-        <div class="chat-empty" id="chat-empty">Si no usan micro, aqui pueden escribir mensajes durante la clase.</div>
-      </div>
-      <div class="chat-compose">
-        <input id="chat-input" type="text" placeholder="Escribe un mensaje para la otra persona">
-        <button class="button secondary" id="send-chat" type="button">Enviar</button>
-      </div>
-    </section>
-
-    <main class="workspace-grid">
-      <section class="board-card">
-        <div class="section-head">
-          <div>
-            <p class="eyebrow">Pizarra</p>
-            <h2>Explica y dibuja</h2>
-          </div>
-          <span class="status-chip" id="connection-badge">Desconectado</span>
-        </div>
-
-        <div class="board-toolbar">
-          <label class="tool">
-            <span>Color</span>
-            <input id="board-color" type="color" value="#d35400">
+    <div class="main-layout">
+      <aside class="left-sidebar">
+        <section class="join-card">
+          <label class="field">
+            <span>Tu nombre</span>
+            <input id="landing-user-name" type="text" placeholder="Escribe tu nombre">
           </label>
-          <label class="tool">
-            <span>Grosor</span>
-            <input id="board-size" type="range" min="2" max="18" value="4">
+          <label class="field">
+            <span>Codigo de sala</span>
+            <input id="landing-room-id" type="text" placeholder="Ejemplo: algebra-101">
           </label>
-          <button class="button secondary" id="clear-board" type="button">Limpiar</button>
-        </div>
-
-        <div class="board-wrap">
-          <canvas id="whiteboard" width="1100" height="560"></canvas>
-        </div>
-      </section>
-
-      <aside class="generator-card">
-        <div class="section-head stacked">
-          <div>
-            <p class="eyebrow">IA</p>
-            <h2>Generador de problemas</h2>
+          <div class="join-actions">
+            <button class="button primary" id="landing-join-room" type="button">Entrar a sala</button>
+            <button class="button secondary" id="copy-room-link" type="button">Copiar link</button>
+            <button class="button secondary" id="toggle-audio" type="button">Silenciar micro</button>
+            <button class="button danger" id="leave-room" type="button">Salir de sala</button>
           </div>
-          <span class="mode-chip" id="assistant-mode">Modo local</span>
-        </div>
+          <p class="status-text" id="room-status">Escribe tu nombre y un codigo de sala para empezar.</p>
+        </section>
 
-        <label class="field">
-          <span>Pedido del profesor</span>
-          <textarea id="teacher-request" rows="5" placeholder="Ejemplo: Genera un problema de polinomios estilo clasico tipo Baldor, nivel intermedio."></textarea>
-        </label>
-
-        <div class="generator-actions">
-          <button class="button primary quick-ai" data-action="generate-problem" type="button">Generar problema</button>
-          <button class="button secondary quick-ai" data-action="give-hint" type="button">Dar pista</button>
-          <button class="button secondary quick-ai" data-action="solve-step-by-step" type="button">Resolver paso a paso</button>
-          <button class="button secondary quick-ai" data-action="generate-variant" type="button">Generar otro parecido</button>
-        </div>
-
-        <label class="field">
-          <span>Titulo del problema</span>
-          <input id="exercise-title" type="text" placeholder="Titulo del problema">
-        </label>
-
-        <label class="field">
-          <span>Problema o enunciado</span>
-          <textarea id="exercise-prompt" rows="8" placeholder="Aqui aparecerá el problema o puedes escribir uno manualmente."></textarea>
-        </label>
-
-        <label class="field">
-          <span>Respuesta del alumno</span>
-          <textarea id="exercise-answer" rows="7" placeholder="El estudiante puede responder aqui."></textarea>
-        </label>
-
-        <div class="challenge-card">
+        <section class="audio-card">
           <div class="section-head">
             <div>
-              <p class="eyebrow">Reto</p>
-              <h3>Resolver problema</h3>
+              <p class="eyebrow">Audio</p>
+              <h2>Microfono en tiempo real</h2>
             </div>
-            <span class="status-chip" id="challenge-state">Sin reto</span>
+            <span class="status-chip" id="audio-state">Micro apagado</span>
           </div>
-          <p class="status-text" id="challenge-status">El maestro puede iniciar un temporizador para que el alumno resuelva el ejercicio actual.</p>
-          <div class="challenge-toolbar teacher-only">
-            <label class="field compact-field">
-              <span>Minutos</span>
-              <select id="challenge-duration">
-                <option value="1">1 min</option>
-                <option value="3" selected>3 min</option>
-                <option value="5">5 min</option>
-                <option value="10">10 min</option>
-              </select>
-            </label>
-            <button class="button primary" id="start-challenge" type="button">Iniciar reto</button>
-            <button class="button secondary" id="stop-challenge" type="button">Detener reto</button>
+          <p class="status-text" id="audio-status">El micro se activa al entrar a la sala. El primero sera maestro y el
+            segundo estudiante.</p>
+          <audio id="remote-audio" autoplay></audio>
+        </section>
+
+        <section class="chat-card">
+          <div class="section-head">
+            <div>
+              <p class="eyebrow">Chat</p>
+              <h2>Mensajes rapidos</h2>
+            </div>
+            <span class="status-chip" id="chat-state">Sin mensajes</span>
           </div>
-          <div class="challenge-timer" id="challenge-timer">00:00</div>
-        </div>
-
-        <div class="generator-actions teacher-only">
-          <button class="button primary" id="sync-exercise" type="button">Actualizar</button>
-          <button class="button secondary" id="clear-exercise" type="button">Limpiar</button>
-        </div>
-
-        <p class="status-text" id="assistant-status">Usa la IA para generar contenido claro con bloques de explicacion, ejercicio, pista y solucion.</p>
-
-        <div class="assistant-output">
-          <h3 id="assistant-title">Asistente listo</h3>
-          <div id="assistant-body" class="assistant-body">Pulsa un boton para generar contenido.</div>
-        </div>
+          <div class="chat-feed" id="chat-feed">
+            <div class="chat-empty" id="chat-empty">Si no usan micro, aqui pueden escribir mensajes durante la clase.
+            </div>
+          </div>
+          <div class="chat-compose">
+            <input id="chat-input" type="text" placeholder="Escribe un mensaje para la otra persona">
+            <button class="button secondary" id="send-chat" type="button">Enviar</button>
+          </div>
       </aside>
-    </main>
+
+      <main class="workspace-grid">
+        <section class="board-card">
+          <div class="section-head">
+            <div>
+              <p class="eyebrow">Pizarra</p>
+              <h2>Explica y dibuja</h2>
+            </div>
+            <span class="status-chip" id="connection-badge">Desconectado</span>
+          </div>
+
+          <div class="board-toolbar">
+            <label class="tool">
+              <span>Color</span>
+              <input id="board-color" type="color" value="#d35400">
+            </label>
+            <label class="tool">
+              <span>Grosor</span>
+              <input id="board-size" type="range" min="2" max="18" value="4">
+            </label>
+            <button class="button secondary teacher-only" id="undo-board" type="button" title="Deshacer (Ctrl+Z)">↩ Deshacer</button>
+            <button class="button secondary" id="clear-board" type="button">Limpiar</button>
+          </div>
+
+          <div class="board-wrap">
+            <canvas id="whiteboard" width="1100" height="560"></canvas>
+            <div class="formula-overlay" id="formula-overlay" style="display:none;">
+              <div class="formula-overlay-inner">
+                <div id="formula-katex-render"></div>
+                <button class="formula-overlay-close teacher-only" id="formula-close-btn" type="button"
+                  title="Quitar fórmula">✕</button>
+              </div>
+            </div>
+            <!-- ⚡ Contenedor de reacciones flotantes -->
+            <div id="reactions-container" aria-hidden="true"></div>
+          </div>
+
+          <!-- ⚡ Barra de reacciones (visible para alumno) -->
+          <div class="reactions-bar student-only" id="reactions-bar">
+            <span class="reactions-label">Reaccionar:</span>
+            <button class="reaction-btn" data-emoji="💡" data-label="¡Entendí!" type="button">💡</button>
+            <button class="reaction-btn" data-emoji="❓" data-label="Tengo duda" type="button">❓</button>
+            <button class="reaction-btn" data-emoji="🔥" data-label="¡Muy fácil!" type="button">🔥</button>
+            <button class="reaction-btn" data-emoji="😵" data-label="Muy difícil" type="button">😵</button>
+            <button class="reaction-btn" data-emoji="👍" data-label="¡Va bien!" type="button">👍</button>
+          </div>
+        </section>
+
+        <aside class="generator-card">
+          <div class="section-head stacked">
+            <div>
+              <p class="eyebrow">IA</p>
+              <h2>Generador de problemas</h2>
+            </div>
+            <span class="mode-chip" id="assistant-mode">Modo local</span>
+          </div>
+
+          <label class="field">
+            <span>Pedido del profesor</span>
+            <textarea id="teacher-request" rows="5"
+              placeholder="Ejemplo: Genera un problema de polinomios estilo clasico tipo Baldor, nivel intermedio."></textarea>
+          </label>
+
+          <div class="generator-actions">
+            <button class="button primary quick-ai" data-action="generate-problem" type="button">Generar
+              problema</button>
+            <button class="button secondary quick-ai" data-action="give-hint" type="button">Dar pista</button>
+            <button class="button secondary quick-ai" data-action="solve-step-by-step" type="button">Resolver paso a
+              paso</button>
+            <button class="button secondary quick-ai" data-action="generate-variant" type="button">Generar otro
+              parecido</button>
+          </div>
+
+          <label class="field">
+            <span>Titulo del problema</span>
+            <input id="exercise-title" type="text" placeholder="Titulo del problema">
+          </label>
+
+          <label class="field">
+            <span>Problema o enunciado</span>
+            <textarea id="exercise-prompt" rows="8"
+              placeholder="Aqui aparecerá el problema o puedes escribir uno manualmente."></textarea>
+          </label>
+
+          <div class="template-generator teacher-only" style="margin-bottom: 16px; margin-top: 8px;">
+            <p class="eyebrow">Crear Plantilla con IA</p>
+            <div class="chat-compose" style="margin-top: 4px;">
+              <input id="template-request" type="text"
+                placeholder="Ej: Fórmula cuadrática, binomio, teorema de bayes...">
+              <button class="button secondary" id="generate-template-btn" type="button" style="padding: 10px 16px;">⚡
+                Crear</button>
+            </div>
+            <p class="status-text" style="font-size: 0.8rem; margin-top: 6px;">Esto insertará una fórmula con espacios
+              vacíos en la respuesta del alumno.</p>
+          </div>
+
+          <label class="field">
+            <span>Respuesta del alumno</span>
+            <textarea id="exercise-answer" rows="7" placeholder="El estudiante puede responder aqui."></textarea>
+          </label>
+
+          <div class="challenge-card">
+            <div class="section-head">
+              <div>
+                <p class="eyebrow">Reto</p>
+                <h3>Resolver problema</h3>
+              </div>
+              <span class="status-chip" id="challenge-state">Sin reto</span>
+            </div>
+            <p class="status-text" id="challenge-status">El maestro puede iniciar un temporizador para que el alumno
+              resuelva el ejercicio actual.</p>
+            <div class="challenge-toolbar teacher-only">
+              <label class="field compact-field">
+                <span>Minutos</span>
+                <select id="challenge-duration">
+                  <option value="1">1 min</option>
+                  <option value="3" selected>3 min</option>
+                  <option value="5">5 min</option>
+                  <option value="10">10 min</option>
+                </select>
+              </label>
+              <button class="button primary" id="start-challenge" type="button">Iniciar reto</button>
+              <button class="button secondary" id="stop-challenge" type="button">Detener reto</button>
+            </div>
+            <div class="challenge-timer" id="challenge-timer">00:00</div>
+          </div>
+
+          <div class="generator-actions teacher-only">
+            <button class="button primary" id="sync-exercise" type="button">Actualizar</button>
+            <button class="button secondary" id="clear-exercise" type="button">Limpiar</button>
+          </div>
+
+          <p class="status-text" id="assistant-status">Usa la IA para generar contenido claro con bloques de
+            explicacion, ejercicio, pista y solucion.</p>
+
+          <div class="assistant-output">
+            <h3 id="assistant-title">Asistente listo</h3>
+            <div id="assistant-body" class="assistant-body">Pulsa un boton para generar contenido.</div>
+          </div>
+        </aside>
+      </main>
+    </div>
   </div>
 
   <script src="/socket.io/socket.io.js"></script>
   <script src="script.js"></script>
 </body>
+
 </html>

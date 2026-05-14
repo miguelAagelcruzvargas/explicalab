@@ -37,6 +37,9 @@ const stopChallengeButton = document.getElementById("stop-challenge");
 const challengeTimer = document.getElementById("challenge-timer");
 const syncExerciseButton = document.getElementById("sync-exercise");
 const clearExerciseButton = document.getElementById("clear-exercise");
+const toggleBoardVisibilityButton = document.getElementById("toggle-board-visibility");
+const templateRequestInput = document.getElementById("template-request");
+const generateTemplateBtn = document.getElementById("generate-template-btn");
 
 const socket = io();
 const rtcConfig = {
@@ -66,6 +69,22 @@ let currentChallenge = {
   label: ""
 };
 let challengeInterval = null;
+let isBoardVisible = true;
+let boardHistory = [];
+const BOARD_HISTORY_LIMIT = 20;
+
+function applyBoardVisibility(visible) {
+  isBoardVisible = visible;
+  const grid = document.querySelector(".workspace-grid");
+  if (visible) {
+    grid.classList.remove("board-hidden");
+    if (toggleBoardVisibilityButton) toggleBoardVisibilityButton.textContent = "Ocultar pizarra";
+    setTimeout(resizeWhiteboard, 50);
+  } else {
+    grid.classList.add("board-hidden");
+    if (toggleBoardVisibilityButton) toggleBoardVisibilityButton.textContent = "Mostrar pizarra";
+  }
+}
 
 const superscriptMap = {
   "0": "⁰",
@@ -566,7 +585,7 @@ function resizeWhiteboard() {
   const snapshot = lastBoardDataUrl || whiteboard.toDataURL("image/webp", 0.65);
   const rect = whiteboard.getBoundingClientRect();
   const cssWidth = Math.max(280, Math.floor(rect.width));
-  const cssHeight = Math.max(320, Math.floor(cssWidth * 0.56));
+  const cssHeight = Math.max(100, Math.floor(rect.height));
   const pixelRatio = Math.min(window.devicePixelRatio || 1, 1.5);
 
   whiteboard.width = Math.floor(cssWidth * pixelRatio);
@@ -633,6 +652,10 @@ function draw(event) {
 
 function stopDrawing() {
   if (isDrawing) {
+    // guardar estado en historial para undo
+    const snapshot = whiteboard.toDataURL("image/webp", 0.8);
+    boardHistory.push(snapshot);
+    if (boardHistory.length > BOARD_HISTORY_LIMIT) boardHistory.shift();
     scheduleBoardSync();
   }
 
@@ -754,6 +777,12 @@ async function joinRoomFlow() {
     return;
   }
 
+  window.localStorage.setItem("explicalab:userName", userName);
+  window.sessionStorage.setItem("explicalab:currentRoom", roomId);
+  const url = new URL(window.location.href);
+  url.searchParams.set("room", roomId);
+  window.history.replaceState({}, "", url.toString());
+
   currentRoomId = roomId;
   await ensureLocalAudio();
   socket.emit("join-room", {
@@ -796,6 +825,7 @@ clearBoardButton.addEventListener("click", () => {
     return;
   }
 
+  boardHistory = [];
   drawBoardBackground();
   lastBoardDataUrl = "";
   if (joinedRoom && currentRoomId) {
@@ -803,10 +833,133 @@ clearBoardButton.addEventListener("click", () => {
   }
 });
 
+// ── ⏪ Deshacer pizarrón ──────────────────────────────────────────────────────
+const undoBoardButton = document.getElementById("undo-board");
+
+function undoBoard() {
+  if (currentUserRole === "student" || boardHistory.length === 0) return;
+  boardHistory.pop(); // quitar el estado actual
+  const previous = boardHistory[boardHistory.length - 1] || null;
+  if (previous) {
+    renderBoardImage(previous);
+    lastBoardDataUrl = previous;
+  } else {
+    drawBoardBackground();
+    lastBoardDataUrl = "";
+  }
+  if (joinedRoom && currentRoomId) {
+    socket.emit("board-update", {
+      roomId: currentRoomId,
+      boardDataUrl: lastBoardDataUrl || ""
+    });
+  }
+}
+
+if (undoBoardButton) {
+  undoBoardButton.addEventListener("click", undoBoard);
+}
+
+document.addEventListener("keydown", (e) => {
+  if ((e.ctrlKey || e.metaKey) && e.key === "z" && !e.shiftKey) {
+    e.preventDefault();
+    undoBoard();
+  }
+});
+
 syncExerciseButton.addEventListener("click", () => {
   syncExerciseContent();
   setStatus("Problema actualizado para la sala.", joinedRoom);
 });
+
+if (toggleBoardVisibilityButton) {
+  toggleBoardVisibilityButton.addEventListener("click", () => {
+    if (currentUserRole === "student" || !joinedRoom) return;
+    const newVisible = !isBoardVisible;
+    applyBoardVisibility(newVisible);
+    socket.emit("board-visibility", {
+      roomId: currentRoomId,
+      visible: newVisible
+    });
+  });
+}
+
+const formulaOverlay = document.getElementById("formula-overlay");
+const formulaKatexRender = document.getElementById("formula-katex-render");
+const formulaCloseBtn = document.getElementById("formula-close-btn");
+
+function showFormulaOverlay(latexStr) {
+  if (!formulaOverlay || !formulaKatexRender) return;
+  formulaKatexRender.innerHTML = "";
+  if (typeof katex !== "undefined") {
+    katex.render(latexStr, formulaKatexRender, {
+      throwOnError: false,
+      displayMode: true,
+      trust: false
+    });
+  } else {
+    // Fallback si KaTeX no cargó (sin conexión)
+    formulaKatexRender.textContent = latexStr;
+  }
+  formulaOverlay.style.display = "flex";
+}
+
+function hideFormulaOverlay() {
+  if (!formulaOverlay) return;
+  formulaOverlay.style.display = "none";
+  if (formulaKatexRender) formulaKatexRender.innerHTML = "";
+}
+
+if (formulaCloseBtn) {
+  formulaCloseBtn.addEventListener("click", () => {
+    hideFormulaOverlay();
+    if (joinedRoom && currentRoomId) {
+      socket.emit("formula-hide", { roomId: currentRoomId });
+    }
+  });
+}
+
+if (generateTemplateBtn) {
+  generateTemplateBtn.addEventListener("click", async () => {
+    const requestText = templateRequestInput.value.trim();
+    if (!requestText) return;
+
+    const originalText = generateTemplateBtn.textContent;
+    generateTemplateBtn.textContent = "⏳";
+    generateTemplateBtn.disabled = true;
+
+    try {
+      const response = await fetch("/api/formula", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ request: requestText })
+      });
+
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+      const data = await response.json();
+      if (data.latex) {
+        showFormulaOverlay(data.latex);
+        templateRequestInput.value = "";
+        if (joinedRoom && currentRoomId) {
+          socket.emit("formula-show", { roomId: currentRoomId, latex: data.latex });
+        }
+      } else if (data.error) {
+        console.error("Error del servidor:", data.error);
+        generateTemplateBtn.textContent = "❌ Error";
+        setTimeout(() => { generateTemplateBtn.textContent = originalText; }, 2000);
+        return;
+      }
+    } catch (error) {
+      console.error("Error generando plantilla:", error);
+      generateTemplateBtn.textContent = "❌ Sin conexión";
+      setTimeout(() => { generateTemplateBtn.textContent = originalText; }, 2500);
+      return;
+    } finally {
+      generateTemplateBtn.textContent = originalText;
+      generateTemplateBtn.disabled = false;
+    }
+  });
+}
 
 clearExerciseButton.addEventListener("click", () => {
   if (currentUserRole === "student") {
@@ -821,6 +974,11 @@ clearExerciseButton.addEventListener("click", () => {
 
 startChallengeButton.addEventListener("click", () => {
   if (currentUserRole === "student") {
+    return;
+  }
+
+  if (!exercisePromptInput.value.trim()) {
+    challengeStatus.textContent = "Primero debes generar o escribir un problema antes de iniciar el reto.";
     return;
   }
 
@@ -852,6 +1010,46 @@ stopChallengeButton.addEventListener("click", () => {
   applyChallengeState(challenge);
   syncChallengeState(challenge);
 });
+
+socket.on("formula-show", ({ latex }) => {
+  showFormulaOverlay(latex);
+});
+
+socket.on("formula-hide", () => {
+  hideFormulaOverlay();
+});
+
+// ── ⚡ Reacciones flotantes ────────────────────────────────────────────────────
+const reactionsContainer = document.getElementById("reactions-container");
+
+function spawnFloatingReaction(emoji) {
+  if (!reactionsContainer) return;
+  const el = document.createElement("span");
+  el.className = "floating-reaction";
+  el.textContent = emoji;
+  // posición horizontal aleatoria
+  el.style.left = (10 + Math.random() * 80) + "%";
+  reactionsContainer.appendChild(el);
+  el.addEventListener("animationend", () => el.remove());
+}
+
+document.querySelectorAll(".reaction-btn").forEach(btn => {
+  btn.addEventListener("click", () => {
+    const emoji = btn.dataset.emoji;
+    spawnFloatingReaction(emoji); // se ve localmente también
+    if (joinedRoom && currentRoomId) {
+      socket.emit("reaction", { roomId: currentRoomId, emoji });
+    }
+    // pequeño bounce en el botón
+    btn.style.transform = "scale(1.4)";
+    setTimeout(() => { btn.style.transform = ""; }, 200);
+  });
+});
+
+socket.on("reaction", ({ emoji }) => {
+  spawnFloatingReaction(emoji);
+});
+
 
 sendChatButton.addEventListener("click", () => {
   sendChatMessage();
@@ -924,11 +1122,12 @@ window.addEventListener("resize", () => {
   }, 120);
 });
 
-socket.on("room-joined", async ({ roomId, participantId, role, participants, boardDataUrl, exerciseContent, challenge }) => {
+socket.on("room-joined", async ({ roomId, participantId, role, participants, boardDataUrl, boardVisible, exerciseContent, challenge }) => {
   joinedRoom = true;
   currentRoomId = roomId;
   localParticipantId = participantId;
   applyRoleView(role);
+  applyBoardVisibility(boardVisible !== false);
   renderBoardImage(boardDataUrl);
   exerciseTitleInput.value = exerciseContent?.title || "";
   exercisePromptInput.value = formatMathText(exerciseContent?.prompt || "");
@@ -955,6 +1154,10 @@ socket.on("board-update", ({ boardDataUrl }) => {
 socket.on("board-clear", () => {
   lastBoardDataUrl = "";
   drawBoardBackground();
+});
+
+socket.on("board-visibility", ({ visible }) => {
+  applyBoardVisibility(visible);
 });
 
 socket.on("exercise-update", ({ content }) => {
@@ -1028,16 +1231,28 @@ socket.on("webrtc-ice-candidate", async ({ candidate }) => {
   }
 });
 
+const savedName = window.localStorage.getItem("explicalab:userName") || "";
+const savedRoom = window.sessionStorage.getItem("explicalab:currentRoom") || "";
 const roomFromUrl = new URLSearchParams(window.location.search).get("room");
-landingRoomIdInput.value = roomFromUrl || createRoomId();
+
+landingUserNameInput.value = savedName;
+landingRoomIdInput.value = roomFromUrl || savedRoom || createRoomId();
+
 applyRoleView("");
 setStatus("Escribe tu nombre y un codigo de sala para empezar.", false);
 setAudioUi("Micro apagado.", false);
 updateChatState();
 renderChallengeUi();
 renderAssistantContent("CONTENIDO\nPulsa un boton para generar contenido.");
+applyBoardVisibility(true);
 resizeWhiteboard();
 drawBoardBackground();
+
+if (savedName && (roomFromUrl || savedRoom)) {
+  setTimeout(() => {
+    joinRoomFlow();
+  }, 150);
+}
 
 window.addEventListener("beforeunload", () => {
   leaveRoomFlow({ silent: true });

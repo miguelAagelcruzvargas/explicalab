@@ -27,23 +27,23 @@ const baldorReference = {
 };
 const aiProvider = process.env.GROQ_API_KEY
   ? {
-      name: "groq",
-      model: groqModel,
-      kind: "chat.completions",
-      client: new OpenAI({
-        apiKey: process.env.GROQ_API_KEY,
-        baseURL: "https://api.groq.com/openai/v1"
-      })
-    }
+    name: "groq",
+    model: groqModel,
+    kind: "chat.completions",
+    client: new OpenAI({
+      apiKey: process.env.GROQ_API_KEY,
+      baseURL: "https://api.groq.com/openai/v1"
+    })
+  }
   : process.env.OPENAI_API_KEY
     ? {
-        name: "openai",
-        model: "gpt-4.1-mini",
-        kind: "responses",
-        client: new OpenAI({
-          apiKey: process.env.OPENAI_API_KEY
-        })
-      }
+      name: "openai",
+      model: "gpt-4.1-mini",
+      kind: "responses",
+      client: new OpenAI({
+        apiKey: process.env.OPENAI_API_KEY
+      })
+    }
     : null;
 
 app.use(express.json({ limit: "2mb" }));
@@ -500,6 +500,13 @@ function buildFallbackAssistantResponse(action, payload) {
     };
   }
 
+  if (action === "generate-template") {
+    return {
+      title: "Plantilla",
+      body: "x = (-[ ] ± √([ ]² - 4[ ][ ])) / 2[ ]"
+    };
+  }
+
   return {
     title: `Retroalimentacion para ${lessonTitle}`,
     body: studentAnswer
@@ -508,7 +515,162 @@ function buildFallbackAssistantResponse(action, payload) {
   };
 }
 
+// ─── Endpoint exclusivo para generación de fórmulas ─────────────────────────
+// Completamente separado del asistente pedagógico. No tiene contexto de clase,
+// no genera explicaciones, solo devuelve la fórmula/plantilla matemática pura.
+app.post("/api/formula", async (req, res) => {
+  const { request } = req.body || {};
+
+  if (!request || !request.trim()) {
+    res.status(400).json({ error: "Falta el nombre de la fórmula solicitada." });
+    return;
+  }
+
+  // Mapa local de fórmulas conocidas en LaTeX (sin gastar tokens de IA)
+  const knownFormulas = {
+    // ── Álgebra ──────────────────────────────────────────────────
+    "cuadratica": "x = \\dfrac{-b \\pm \\sqrt{b^2 - 4ac}}{2a}",
+    "cuadrática": "x = \\dfrac{-b \\pm \\sqrt{b^2 - 4ac}}{2a}",
+    "bhaskara": "x = \\dfrac{-b \\pm \\sqrt{b^2 - 4ac}}{2a}",
+    "binomio cuadrado": "(a + b)^2 = a^2 + 2ab + b^2",
+    "binomio cuadrado diferencia": "(a - b)^2 = a^2 - 2ab + b^2",
+    "diferencia cuadrados": "(a + b)(a - b) = a^2 - b^2",
+    "binomio newton": "(a + b)^n = \\sum_{k=0}^{n} \\binom{n}{k}\\, a^{n-k}\\, b^k",
+    "pendiente": "m = \\dfrac{y_2 - y_1}{x_2 - x_1}",
+    "ecuacion recta": "y = mx + b",
+    "ecuacion lineal": "ax + b = 0 \\quad \\Rightarrow \\quad x = -\\dfrac{b}{a}",
+    // ── Geometría ────────────────────────────────────────────────
+    "pitagoras": "c^2 = a^2 + b^2",
+    "pitágoras": "c^2 = a^2 + b^2",
+    "area cuadrado": "A = l^2",
+    "area rectangulo": "A = b \\times h",
+    "área rectángulo": "A = b \\times h",
+    "area triangulo": "A = \\dfrac{b \\times h}{2}",
+    "área triángulo": "A = \\dfrac{b \\times h}{2}",
+    "area circulo": "A = \\pi r^2",
+    "área círculo": "A = \\pi r^2",
+    "perimetro circulo": "P = 2\\pi r",
+    "perímetro círculo": "P = 2\\pi r",
+    "volumen cubo": "V = l^3",
+    "volumen esfera": "V = \\dfrac{4}{3}\\pi r^3",
+    "volumen cilindro": "V = \\pi r^2 h",
+    "distancia": "d = \\sqrt{(x_2-x_1)^2 + (y_2-y_1)^2}",
+    "punto medio": "M = \\left(\\dfrac{x_1+x_2}{2},\\ \\dfrac{y_1+y_2}{2}\\right)",
+    // ── Trigonometría ────────────────────────────────────────────
+    "seno": "\\sin(\\theta) = \\dfrac{\\text{Cateto opuesto}}{\\text{Hipotenusa}}",
+    "coseno": "\\cos(\\theta) = \\dfrac{\\text{Cateto adyacente}}{\\text{Hipotenusa}}",
+    "tangente": "\\tan(\\theta) = \\dfrac{\\text{Cateto opuesto}}{\\text{Cateto adyacente}}",
+    "identidad pitagorica": "\\sin^2(\\theta) + \\cos^2(\\theta) = 1",
+    "seno coseno": "\\sin^2(\\theta) + \\cos^2(\\theta) = 1",
+    "ley cosenos": "c^2 = a^2 + b^2 - 2ab\\cos(C)",
+    "ley senos": "\\dfrac{a}{\\sin A} = \\dfrac{b}{\\sin B} = \\dfrac{c}{\\sin C}",
+    // ── Teoría de conjuntos (notación SEP) ──────────────────────
+    "union": "A \\cup B = \\{x \\mid x \\in A \\text{ o } x \\in B\\}",
+    "unión": "A \\cup B = \\{x \\mid x \\in A \\text{ o } x \\in B\\}",
+    "interseccion": "A \\cap B = \\{x \\mid x \\in A \\text{ y } x \\in B\\}",
+    "intersección": "A \\cap B = \\{x \\mid x \\in A \\text{ y } x \\in B\\}",
+    "complemento": "A' = \\{x \\mid x \\notin A\\}",
+    "diferencia conjuntos": "A - B = \\{x \\mid x \\in A \\text{ y } x \\notin B\\}",
+    "subconjunto": "A \\subseteq B \\iff \\text{todo elemento de } A \\text{ pertenece a } B",
+    "cardinalidad union": "|A \\cup B| = |A| + |B| - |A \\cap B|",
+    // ── Estadística ──────────────────────────────────────────────
+    "media": "\\bar{x} = \\dfrac{x_1 + x_2 + \\cdots + x_n}{n}",
+    "mediana": "\\text{Mediana} = \\text{valor central de los datos ordenados}",
+    "varianza": "\\sigma^2 = \\dfrac{\\sum_{i=1}^{n}(x_i - \\bar{x})^2}{n}",
+    "desviacion": "\\sigma = \\sqrt{\\dfrac{\\sum_{i=1}^{n}(x_i - \\bar{x})^2}{n}}",
+    "desviación": "\\sigma = \\sqrt{\\dfrac{\\sum_{i=1}^{n}(x_i - \\bar{x})^2}{n}}",
+    "probabilidad": "P(A) = \\dfrac{\\text{Casos favorables}}{\\text{Casos posibles}}",
+    "regla adicion": "P(A \\cup B) = P(A) + P(B) - P(A \\cap B)",
+    "regla multiplicacion": "P(A \\cap B) = P(A) \\cdot P(B|A)",
+    "bayes": "P(A|B) = \\dfrac{P(B|A)\\cdot P(A)}{P(B)}",
+    "permutacion": "P(n,r) = \\dfrac{n!}{(n-r)!}",
+    "combinacion": "C(n,r) = \\dfrac{n!}{r!\\,(n-r)!}",
+    "combinación": "C(n,r) = \\dfrac{n!}{r!\\,(n-r)!}",
+    // ── Cálculo ──────────────────────────────────────────────────
+    "derivada": "f'(x) = \\lim_{h \\to 0} \\dfrac{f(x+h) - f(x)}{h}",
+    "integral": "\\int_a^b f(x)\\,dx = F(b) - F(a)",
+    "logaritmo": "\\log_b(x) = \\dfrac{\\ln x}{\\ln b}",
+    "interes compuesto": "A = P\\left(1 + \\dfrac{r}{n}\\right)^{nt}",
+    "interés compuesto": "A = P\\left(1 + \\dfrac{r}{n}\\right)^{nt}",
+    // ── Física básica ────────────────────────────────────────────
+    "einstein": "E = mc^2",
+    "velocidad": "v = \\dfrac{d}{t}",
+    "fuerza": "F = m \\cdot a",
+    "densidad": "\\rho = \\dfrac{m}{V}",
+    "euler": "e^{i\\pi} + 1 = 0",
+  };
+
+  const key = request.trim().toLowerCase();
+  const localHit = Object.keys(knownFormulas).find(k => key.includes(k) || k.includes(key));
+  if (localHit) {
+    res.json({ latex: knownFormulas[localHit], source: "local" });
+    return;
+  }
+
+  // Si no está en el mapa local, preguntar a la IA con prompt ultra-restrictivo
+  if (!aiProvider) {
+    res.json({ latex: request, source: "fallback" });
+    return;
+  }
+
+  try {
+    const systemMsg = [
+      "Eres un generador de fórmulas matemáticas para pizarrón escolar en México (nivel secundaria y preparatoria, currículo SEP y COBACH).",
+      "Tu ÚNICA función es devolver la fórmula o expresión matemática en LaTeX válido. NUNCA expliques nada. NUNCA añadas texto narrativo.",
+      "REGLAS DE NOTACIÓN DIDÁCTICA:",
+      "- Usa notación estándar de libros de texto mexicanos (SEP, Ángel Baldor, Conamat).",
+      "- Para teoría de conjuntos usa \\text{o} y \\text{y} en lugar de \\lor y \\land (más legible para alumnos).",
+      "- Para funciones trigonométricas usa nombres en español cuando sea útil: \\text{seno}, \\text{coseno} o la notación \\sin/\\cos según convenga.",
+      "- Para estadística usa \\bar{x} para la media muestral, \\mu para poblacional.",
+      "- Usa \\dfrac en lugar de \\frac para que las fracciones se vean más grandes y legibles.",
+      "- Usa \\text{...} para añadir etiquetas legibles (ej: cateto opuesto, hipotenusa).",
+      "- Evita notación de lógica matemática formal (\\forall, \\exists, \\vdash) a menos que se pida explícitamente.",
+      "Devuelve SOLO el código LaTeX puro, sin $, sin $$, sin delimitadores. Ejemplo: x = \\dfrac{-b \\pm \\sqrt{b^2 - 4ac}}{2a}"
+    ].join(" ");
+    const userMsg = `Dame SOLO el código LaTeX de la fórmula: ${request.trim()}`;
+
+    let rawText = "";
+
+    if (aiProvider.kind === "chat.completions") {
+      const completion = await aiProvider.client.chat.completions.create({
+        model: aiProvider.model,
+        temperature: 0.1,
+        max_tokens: 120,
+        messages: [
+          { role: "system", content: systemMsg },
+          { role: "user", content: userMsg }
+        ]
+      });
+      rawText = completion.choices?.[0]?.message?.content || "";
+    } else {
+      const response = await aiProvider.client.responses.create({
+        model: aiProvider.model,
+        input: [
+          { role: "system", content: systemMsg },
+          { role: "user", content: userMsg }
+        ]
+      });
+      rawText = response.output_text || "";
+    }
+
+    // Limpiar delimitadores LaTeX y texto sobrante
+    const latex = rawText
+      .replace(/\$\$/g, "").replace(/\$/g, "")
+      .replace(/\\\[|\\\]/g, "").replace(/\\\(|\\\)/g, "")
+      .replace(/^```[a-z]*/gi, "").replace(/```/g, "")
+      .replace(/^(la fórmula es|formula|resultado|respuesta)[^:]*:/gi, "")
+      .trim()
+      .split("\n")[0]
+      .trim();
+
+    res.json({ latex: latex || request, source: "ai" });
+  } catch (error) {
+    res.status(500).json({ error: "No se pudo generar la fórmula.", detail: error.message });
+  }
+});
+
 app.post("/api/ai-assist", async (req, res) => {
+
   const {
     action,
     subjectName,
@@ -567,33 +729,47 @@ app.post("/api/ai-assist", async (req, res) => {
       teacherRequest
     });
 
-    const prompt = [
+    const basePrompt = [
       `Accion: ${actionLabelMap[action] || action}`,
       `Materia: ${subjectName || "General"}`,
       `Tema: ${lessonTitle || "Sin tema"}`,
-      `Resumen del tema: ${lessonSummary || "Sin resumen"}`,
-      `Idea central: ${lessonCore || "Sin idea central"}`,
-      `Pasos sugeridos: ${(lessonSteps || []).join(" | ") || "Sin pasos"}`,
-      `Titulo del ejercicio: ${exerciseTitle || "Sin titulo"}`,
-      `Enunciado del ejercicio: ${exercisePrompt || "Sin enunciado"}`,
-      `Respuesta del alumno: ${exerciseAnswer || "Sin respuesta"}`,
       `Pedido del profesor: ${teacherRequest || "Sin pedido adicional"}`,
-      baldorContext ? `Contexto de referencia inspirado en el PDF local de Baldor:\n${baldorContext}` : "No hay contexto adicional de Baldor disponible.",
       "Responde en espanol.",
-      "Devuelve JSON valido con esta forma exacta: {\"title\":\"...\",\"body\":\"...\"}.",
-      "No uses markdown, no uses ``` y no pongas ## en los encabezados.",
-      "Dentro de body escribe encabezados limpios en mayusculas como EXPLICACION, EJERCICIO, PISTA, SOLUCION y RETROALIMENTACION.",
-      "El contenido debe ser didactico, claro, breve y util para una clase en vivo.",
-      "Cuando genere problemas o apoyo, separa el contenido con bloques claros usando titulos como EXPLICACION, EJERCICIO, PISTA, SOLUCION o RETROALIMENTACION.",
-      "No respondas en parrafos ambiguos. Hazlo facil de leer para un profesor y un alumno.",
-      "Si el profesor pide contenido tipo Baldor o algebra clasica, responde con estilo de libro de algebra elemental: formal, limpio, gradual y centrado en una habilidad concreta.",
-      "Para Baldor prioriza temas como clasificacion de expresiones, reduccion de terminos semejantes, productos notables, factorizacion, fracciones algebraicas, exponentes, radicales y ecuaciones.",
-      "Incluye explicacion breve, enunciado bien redactado, pista util y solucion ordenada, como material de clase y practica.",
-      "Usa el contexto de referencia solo para inspirarte en estilo, temas y nivel. No copies textualmente fragmentos largos ni reproduzcas el solucionario tal cual.",
-      "Si el pedido es de algebra, polinomios o estilo Baldor, evita ejercicios demasiado simples de una sola combinacion directa.",
-      "Prefiere problemas con varios pasos, parentesis, signos, terminos semejantes no obvios, factorizacion, productos notables o simplificacion estructurada segun corresponda.",
-      "Si generas un ejercicio, procura que parezca de libro clasico: formal, limpio, retador pero resoluble."
-    ].join("\n");
+      "Devuelve JSON valido con esta forma exacta: {\"title\":\"...\",\"body\":\"...\"}."
+    ];
+
+    if (action === "generate-template") {
+      basePrompt.push(
+        "IMPORTANTE: ESTO ES UNA PLANTILLA PARA EL PIZARRON. PROHIBIDO USAR TEXTO ADICIONAL.",
+        "SOLO debes devolver la formula matematica o plantilla solicitada con corchetes [ ] para que el alumno la rellene.",
+        "Ejemplo correcto: x = (-[ ] ± √([ ]² - 4[ ][ ])) / 2[ ]",
+        "NO escribas explicaciones. NO uses palabras como 'aplica', 'resuelve' ni encabezados."
+      );
+    } else {
+      basePrompt.push(
+        `Resumen del tema: ${lessonSummary || "Sin resumen"}`,
+        `Idea central: ${lessonCore || "Sin idea central"}`,
+        `Pasos sugeridos: ${(lessonSteps || []).join(" | ") || "Sin pasos"}`,
+        `Titulo del ejercicio: ${exerciseTitle || "Sin titulo"}`,
+        `Enunciado del ejercicio: ${exercisePrompt || "Sin enunciado"}`,
+        `Respuesta del alumno: ${exerciseAnswer || "Sin respuesta"}`,
+        baldorContext ? `Contexto de referencia inspirado en el PDF local de Baldor:\n${baldorContext}` : "No hay contexto adicional de Baldor disponible.",
+        "No uses markdown, no uses ``` y no pongas ## en los encabezados.",
+        "Dentro de body escribe encabezados limpios en mayusculas como EXPLICACION, EJERCICIO, PISTA, SOLUCION y RETROALIMENTACION.",
+        "El contenido debe ser didactico, claro, breve y util para una clase en vivo.",
+        "Cuando genere problemas o apoyo, separa el contenido con bloques claros usando titulos como EXPLICACION, EJERCICIO, PISTA, SOLUCION o RETROALIMENTACION.",
+        "No respondas en parrafos ambiguos. Hazlo facil de leer para un profesor y un alumno.",
+        "Si el profesor pide contenido tipo Baldor o algebra clasica, responde con estilo de libro de algebra elemental: formal, limpio, gradual y centrado en una habilidad concreta.",
+        "Para Baldor prioriza temas como clasificacion de expresiones, reduccion de terminos semejantes, productos notables, factorizacion, fracciones algebraicas, exponentes, radicales y ecuaciones.",
+        "Incluye explicacion breve, enunciado bien redactado, pista util y solucion ordenada, como material de clase y practica.",
+        "Usa el contexto de referencia solo para inspirarte en estilo, temas y nivel. No copies textualmente fragmentos largos ni reproduzcas el solucionario tal cual.",
+        "Si el pedido es de algebra, polinomios o estilo Baldor, evita ejercicios demasiado simples de una sola combinacion directa.",
+        "Prefiere problemas con varios pasos, parentesis, signos, terminos semejantes no obvios, factorizacion, productos notables o simplificacion estructurada segun corresponda.",
+        "Si generas un ejercicio, procura que parezca de libro clasico: formal, limpio, retador pero resoluble."
+      );
+    }
+
+    const prompt = basePrompt.join("\n");
 
     const text = await requestAiJson(prompt);
     if (!text.trim()) {
@@ -631,6 +807,9 @@ function getRoomState(roomId) {
       teacherKey: "",
       studentKey: "",
       boardDataUrl: "",
+      boardVisible: true,
+      raisedHands: new Map(),
+      activePoll: null,
       challenge: {
         active: false,
         endsAt: 0,
@@ -744,6 +923,7 @@ io.on("connection", (socket) => {
       role,
       participants: serializeMembers(room),
       boardDataUrl: room.boardDataUrl,
+      boardVisible: room.boardVisible,
       exerciseContent: room.exerciseContent,
       challenge: room.challenge
     });
@@ -825,6 +1005,16 @@ io.on("connection", (socket) => {
     io.to(roomId).emit("board-clear");
   });
 
+  socket.on("board-visibility", ({ roomId, visible }) => {
+    if (!roomId || !rooms.has(roomId)) {
+      return;
+    }
+
+    const room = rooms.get(roomId);
+    room.boardVisible = Boolean(visible);
+    io.to(roomId).emit("board-visibility", { visible: room.boardVisible });
+  });
+
   socket.on("exercise-update", ({ roomId, content }) => {
     if (!roomId || !rooms.has(roomId)) {
       return;
@@ -858,6 +1048,22 @@ io.on("connection", (socket) => {
     io.to(roomId).emit("challenge-update", {
       challenge: room.challenge
     });
+  });
+
+  socket.on("formula-show", ({ roomId, latex }) => {
+    if (!roomId || !rooms.has(roomId) || !latex) return;
+    socket.to(roomId).emit("formula-show", { latex });
+  });
+
+  socket.on("formula-hide", ({ roomId }) => {
+    if (!roomId || !rooms.has(roomId)) return;
+    socket.to(roomId).emit("formula-hide");
+  });
+
+  // ── ⚡ Reacciones flotantes ─────────────────────────────────────────────────
+  socket.on("reaction", ({ roomId, emoji, name }) => {
+    if (!roomId || !rooms.has(roomId)) return;
+    socket.to(roomId).emit("reaction", { emoji, name });
   });
 
   socket.on("leave-room", () => {

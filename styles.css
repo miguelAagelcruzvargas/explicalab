@@ -22,14 +22,20 @@
 body {
   margin: 0;
   font-family: "Outfit", sans-serif;
-  background: linear-gradient(180deg, #fffdf9 0%, var(--bg) 100%);
+  background: var(--bg-gradient);
   color: var(--text);
+  height: 100vh;
+  overflow: hidden;
 }
 
 .app-shell {
-  width: min(1440px, calc(100% - 24px));
-  margin: 0 auto;
-  padding: 20px 0 32px;
+  width: 100%;
+  max-width: 100%;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  padding: 16px;
+  gap: 16px;
 }
 
 .topbar,
@@ -99,34 +105,70 @@ h2 {
   box-shadow: var(--shadow);
 }
 
+.main-layout {
+  display: grid;
+  grid-template-columns: 320px 1fr;
+  gap: 16px;
+  flex: 1;
+  min-height: 0;
+}
+
+.left-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.left-sidebar::-webkit-scrollbar,
+.generator-card::-webkit-scrollbar {
+  width: 6px;
+}
+
+.left-sidebar::-webkit-scrollbar-thumb,
+.generator-card::-webkit-scrollbar-thumb {
+  background: var(--line);
+  border-radius: 4px;
+}
+
 .join-card {
   padding: 18px;
-  display: grid;
-  grid-template-columns: 1fr 1fr auto;
+  display: flex;
+  flex-direction: column;
   gap: 14px;
-  margin-bottom: 18px;
-  align-items: end;
 }
 
-.audio-card {
-  padding: 18px;
-  margin-bottom: 18px;
-}
-
+.audio-card,
 .chat-card {
   padding: 18px;
-  margin-bottom: 18px;
 }
 
 .workspace-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1.6fr) minmax(340px, 0.8fr);
-  gap: 18px;
+  grid-template-columns: minmax(0, 1.4fr) minmax(360px, 0.9fr);
+  gap: 16px;
+  min-height: 0;
 }
 
-.board-card,
+.workspace-grid.board-hidden {
+  grid-template-columns: 1fr;
+}
+
+.workspace-grid.board-hidden .board-card {
+  display: none;
+}
+
+.board-card {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
 .generator-card {
   padding: 20px;
+  overflow-y: auto;
 }
 
 .field {
@@ -214,7 +256,81 @@ h2 {
   padding: 12px;
   border-radius: var(--radius-lg);
   border: 1px solid var(--line);
-  background: #fffdfa;
+  background: #1A1F2C;
+  box-shadow: inset 0 4px 20px rgba(0, 0, 0, 0.4);
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  position: relative;
+}
+
+/* ── Formula KaTeX overlay ───────────────────────────────────── */
+.formula-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(10, 13, 20, 0.82);
+  backdrop-filter: blur(6px);
+  border-radius: var(--radius-lg);
+  z-index: 10;
+  animation: fadeInOverlay 0.25s ease;
+}
+
+@keyframes fadeInOverlay {
+  from { opacity: 0; transform: scale(0.97); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+.formula-overlay-inner {
+  position: relative;
+  padding: 28px 36px 32px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.5);
+  max-width: 96%;
+  width: 96%;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+#formula-katex-render {
+  color: #fff;
+  font-size: clamp(1rem, 2.4vw, 1.8rem);
+  text-align: center;
+  line-height: 1.7;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 4px;
+  /* Permite que KaTeX salte de línea en fracciones largas */
+  word-break: break-word;
+}
+
+/* Make KaTeX scale in dark overlay */
+.formula-overlay .katex {
+  color: #f0f4ff;
+}
+
+.formula-overlay-close {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  background: transparent;
+  border: none;
+  color: rgba(255, 255, 255, 0.45);
+  font-size: 1.1rem;
+  cursor: pointer;
+  line-height: 1;
+  padding: 4px 6px;
+  border-radius: 6px;
+  transition: color 0.15s, background 0.15s;
+}
+
+.formula-overlay-close:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.1);
 }
 
 .chat-feed {
@@ -286,8 +402,9 @@ h2 {
 }
 
 #whiteboard {
+  flex: 1;
   width: 100%;
-  min-height: 520px;
+  height: 100%;
   display: block;
   border-radius: 14px;
   background:
@@ -386,14 +503,100 @@ h2 {
   font-variant-numeric: lining-nums;
 }
 
+/* ── Barra de reacciones (alumno) ──────────────────────────── */
+.reactions-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 10px 14px;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  flex-wrap: wrap;
+}
+
+.reactions-label {
+  font-size: 0.78rem;
+  color: var(--muted);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+.reaction-btn {
+  background: none;
+  border: none;
+  font-size: 1.6rem;
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: 10px;
+  transition: transform 0.15s, background 0.15s;
+  line-height: 1;
+}
+
+.reaction-btn:hover {
+  transform: scale(1.25);
+  background: rgba(255,255,255,0.12);
+}
+
+.reaction-btn:active {
+  transform: scale(0.9);
+}
+
+/* ── Reacciones flotantes sobre el pizarrón ────────────────── */
+#reactions-container {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+  z-index: 5;
+  border-radius: var(--radius-lg);
+}
+
+.floating-reaction {
+  position: absolute;
+  bottom: 16px;
+  font-size: 2.6rem;
+  animation: floatUp 2.8s ease-out forwards;
+  pointer-events: none;
+  user-select: none;
+  filter: drop-shadow(0 2px 8px rgba(0,0,0,0.4));
+}
+
+@keyframes floatUp {
+  0%   { transform: translateY(0) scale(1);    opacity: 1; }
+  60%  { transform: translateY(-180px) scale(1.15); opacity: 0.9; }
+  100% { transform: translateY(-300px) scale(0.7);  opacity: 0; }
+}
+
 body.role-student .teacher-only {
   display: none !important;
 }
 
-@media (max-width: 980px) {
-  .join-card,
+@media (max-width: 1080px) {
+  body {
+    height: auto;
+    overflow: auto;
+  }
+  .app-shell {
+    height: auto;
+    min-height: 100vh;
+  }
+  .main-layout {
+    grid-template-columns: 1fr;
+    overflow-y: visible;
+  }
+  .left-sidebar {
+    overflow-y: visible;
+  }
   .workspace-grid {
     grid-template-columns: 1fr;
+  }
+  .generator-card {
+    overflow-y: visible;
+  }
+  .board-wrap {
+    min-height: 400px;
   }
 }
 
