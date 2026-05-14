@@ -755,18 +755,39 @@ app.post("/api/ai-assist", async (req, res) => {
         `Respuesta del alumno: ${exerciseAnswer || "Sin respuesta"}`,
         baldorContext ? `Contexto de referencia inspirado en el PDF local de Baldor:\n${baldorContext}` : "No hay contexto adicional de Baldor disponible.",
         "No uses markdown, no uses ``` y no pongas ## en los encabezados.",
-        "Dentro de body escribe encabezados limpios en mayusculas como EXPLICACION, EJERCICIO, PISTA, SOLUCION y RETROALIMENTACION.",
-        "El contenido debe ser didactico, claro, breve y util para una clase en vivo.",
-        "Cuando genere problemas o apoyo, separa el contenido con bloques claros usando titulos como EXPLICACION, EJERCICIO, PISTA, SOLUCION o RETROALIMENTACION.",
-        "No respondas en parrafos ambiguos. Hazlo facil de leer para un profesor y un alumno.",
-        "Si el profesor pide contenido tipo Baldor o algebra clasica, responde con estilo de libro de algebra elemental: formal, limpio, gradual y centrado en una habilidad concreta.",
-        "Para Baldor prioriza temas como clasificacion de expresiones, reduccion de terminos semejantes, productos notables, factorizacion, fracciones algebraicas, exponentes, radicales y ecuaciones.",
-        "Incluye explicacion breve, enunciado bien redactado, pista util y solucion ordenada, como material de clase y practica.",
-        "Usa el contexto de referencia solo para inspirarte en estilo, temas y nivel. No copies textualmente fragmentos largos ni reproduzcas el solucionario tal cual.",
-        "Si el pedido es de algebra, polinomios o estilo Baldor, evita ejercicios demasiado simples de una sola combinacion directa.",
-        "Prefiere problemas con varios pasos, parentesis, signos, terminos semejantes no obvios, factorizacion, productos notables o simplificacion estructurada segun corresponda.",
-        "Si generas un ejercicio, procura que parezca de libro clasico: formal, limpio, retador pero resoluble."
+        "Dentro de body escribe encabezados limpios en mayusculas segun corresponda.",
+        "El contenido debe ser didactico, claro, breve y util para una clase en vivo."
       );
+
+      // Reglas específicas por acción para evitar dar la solución antes de tiempo
+      if (action === "generate-problem" || action === "generate-variant") {
+        basePrompt.push(
+          "OBJETIVO: Generar un problema nuevo y didáctico.",
+          "Incluye SOLO los bloques: EXPLICACION (un contexto breve y motivador) y EJERCICIO (el enunciado claro).",
+          "PROHIBIDO incluir la solución, resultados numéricos o respuestas finales.",
+          "Usa lenguaje sencillo y cercano al estudiante mexicano (bachillerato/secundaria)."
+        );
+      } else if (action === "give-hint") {
+        basePrompt.push(
+          "OBJETIVO: Dar una pista estratégica.",
+          "Incluye SOLO el bloque: PISTA.",
+          "No resuelvas nada. Da un empujón sobre qué fórmula o concepto aplicar (ej: 'Recuerda que los signos iguales se suman...')."
+        );
+      } else if (action === "solve-step-by-step") {
+        basePrompt.push(
+          "OBJETIVO: Resolución maestra detallada.",
+          "Incluye SOLO el bloque: SOLUCION.",
+          "Explica cada paso como si fueras un profesor frente al pizarrón.",
+          "Usa lenguaje claro: 'Primero agrupamos...', 'Luego despejamos...', 'Finalmente simplificamos...'.",
+          "Asegúrate de que la lógica sea impecable y fácil de seguir."
+        );
+      } else if (action === "feedback") {
+        basePrompt.push(
+          "OBJETIVO: Evaluar la respuesta del alumno.",
+          "Incluye los bloques: RETROALIMENTACION, QUE HIZO BIEN y QUE DEBE CORREGIR.",
+          "Sé motivador pero preciso en los errores matemáticos."
+        );
+      }
     }
 
     const prompt = basePrompt.join("\n");
