@@ -119,9 +119,25 @@ function parseAiResponse(text) {
     }
   }
 
+  const titleMatch = withoutFences.match(/"title"\s*:\s*"([^"]+)"/i);
+  const bodyMatch = withoutFences.match(/"body"\s*:\s*"([\s\S]*)"\s*}\s*$/i);
+  if (titleMatch || bodyMatch) {
+    const rawBody = bodyMatch ? bodyMatch[1] : withoutFences;
+    return {
+      title: titleMatch ? titleMatch[1].trim() : "Resultado IA",
+      body: rawBody
+        .replace(/\\"/g, "\"")
+        .replace(/\\n/g, "\n")
+        .replace(/^\s*##\s*/gm, "")
+        .trim()
+    };
+  }
+
   return {
     title: "Resultado IA",
     body: withoutFences
+      .replace(/^\s*##\s*/gm, "")
+      .trim()
   };
 }
 
@@ -258,6 +274,8 @@ app.post("/api/ai-assist", async (req, res) => {
       `Pedido del profesor: ${teacherRequest || "Sin pedido adicional"}`,
       "Responde en espanol.",
       "Devuelve JSON valido con esta forma exacta: {\"title\":\"...\",\"body\":\"...\"}.",
+      "No uses markdown, no uses ``` y no pongas ## en los encabezados.",
+      "Dentro de body escribe encabezados limpios en mayusculas como EXPLICACION, EJERCICIO, PISTA, SOLUCION y RETROALIMENTACION.",
       "El contenido debe ser didactico, claro, breve y util para una clase en vivo.",
       "Cuando genere problemas o apoyo, separa el contenido con bloques claros usando titulos como EXPLICACION, EJERCICIO, PISTA, SOLUCION o RETROALIMENTACION.",
       "No respondas en parrafos ambiguos. Hazlo facil de leer para un profesor y un alumno.",

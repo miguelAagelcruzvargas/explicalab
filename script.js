@@ -110,19 +110,20 @@ function parseAssistantSections(text = "") {
     return [];
   }
 
-  const matches = [...cleaned.matchAll(/(^|\n)(EXPLICACION|EJERCICIO|PISTA|SOLUCION(?: PASO A PASO)?|RETROALIMENTACION|QUE HIZO BIEN|QUE DEBE CORREGIR|SIGUIENTE PASO|PASOS|CIERRE)\n/gi)];
+  const normalized = cleaned.replace(/^\s*##\s*/gm, "");
+  const matches = [...normalized.matchAll(/(^|\n)(EXPLICACION|EJERCICIO|PISTA|SOLUCION(?: PASO A PASO)?|RETROALIMENTACION|QUE HIZO BIEN|QUE DEBE CORREGIR|SIGUIENTE PASO|PASOS|CIERRE)\n/gi)];
   if (!matches.length) {
-    return [{ heading: "Contenido", body: cleaned }];
+    return [{ heading: "Contenido", body: normalized }];
   }
 
   const sections = [];
   matches.forEach((match, index) => {
     const heading = match[2].toUpperCase();
     const start = match.index + match[0].length;
-    const end = index + 1 < matches.length ? matches[index + 1].index : cleaned.length;
+    const end = index + 1 < matches.length ? matches[index + 1].index : normalized.length;
     sections.push({
       heading,
-      body: cleaned.slice(start, end).trim()
+      body: normalized.slice(start, end).trim()
     });
   });
 
