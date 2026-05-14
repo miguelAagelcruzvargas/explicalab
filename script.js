@@ -8,6 +8,7 @@ const landingRoomIdInput = document.getElementById("landing-room-id");
 const landingJoinRoomButton = document.getElementById("landing-join-room");
 const copyRoomLinkButton = document.getElementById("copy-room-link");
 const toggleAudioButton = document.getElementById("toggle-audio");
+const leaveRoomButton = document.getElementById("leave-room");
 const roomStatus = document.getElementById("room-status");
 const connectionBadge = document.getElementById("connection-badge");
 const workspaceRole = document.getElementById("workspace-role");
@@ -28,6 +29,12 @@ const teacherRequestInput = document.getElementById("teacher-request");
 const exerciseTitleInput = document.getElementById("exercise-title");
 const exercisePromptInput = document.getElementById("exercise-prompt");
 const exerciseAnswerInput = document.getElementById("exercise-answer");
+const challengeState = document.getElementById("challenge-state");
+const challengeStatus = document.getElementById("challenge-status");
+const challengeDurationSelect = document.getElementById("challenge-duration");
+const startChallengeButton = document.getElementById("start-challenge");
+const stopChallengeButton = document.getElementById("stop-challenge");
+const challengeTimer = document.getElementById("challenge-timer");
 const syncExerciseButton = document.getElementById("sync-exercise");
 const clearExerciseButton = document.getElementById("clear-exercise");
 
@@ -52,6 +59,13 @@ let boardSyncTimeout = null;
 let lastBoardDataUrl = "";
 let resizeTimer = null;
 let chatCount = 0;
+let currentChallenge = {
+  active: false,
+  endsAt: 0,
+  durationSeconds: 0,
+  label: ""
+};
+let challengeInterval = null;
 
 const superscriptMap = {
   "0": "⁰",
@@ -67,14 +81,72 @@ const superscriptMap = {
   "-": "⁻"
 };
 
+const latexInlineReplacements = [
+  { pattern: /\\cap/g, value: "∩" },
+  { pattern: /\\cup/g, value: "∪" },
+  { pattern: /\\in/g, value: "∈" },
+  { pattern: /\\notin/g, value: "∉" },
+  { pattern: /\\subseteq/g, value: "⊆" },
+  { pattern: /\\subset/g, value: "⊂" },
+  { pattern: /\\supseteq/g, value: "⊇" },
+  { pattern: /\\supset/g, value: "⊃" },
+  { pattern: /\\emptyset/g, value: "∅" },
+  { pattern: /\\Rightarrow/g, value: "⇒" },
+  { pattern: /\\Leftarrow/g, value: "⇐" },
+  { pattern: /\\leftrightarrow/g, value: "↔" },
+  { pattern: /\\rightarrow/g, value: "→" },
+  { pattern: /\\leftarrow/g, value: "←" },
+  { pattern: /\\times/g, value: "×" },
+  { pattern: /\\div/g, value: "÷" },
+  { pattern: /\\pm/g, value: "±" },
+  { pattern: /\\neq/g, value: "≠" },
+  { pattern: /\\geq/g, value: "≥" },
+  { pattern: /\\leq/g, value: "≤" }
+];
+
 function createRoomId() {
   return `clase-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function createParticipantKey() {
+  return `participant-${Math.random().toString(36).slice(2, 10)}-${Date.now().toString(36)}`;
+}
+
+function formatCountdown(totalSeconds) {
+  const safeSeconds = Math.max(0, totalSeconds);
+  const minutes = String(Math.floor(safeSeconds / 60)).padStart(2, "0");
+  const seconds = String(safeSeconds % 60).padStart(2, "0");
+  return `${minutes}:${seconds}`;
+}
+
+function getParticipantKey(roomId) {
+  const normalizedRoomId = String(roomId || "").trim().toLowerCase();
+  if (!normalizedRoomId) {
+    return "";
+  }
+
+  const storageKey = `explicalab:participant:${normalizedRoomId}`;
+  let participantKey = window.localStorage.getItem(storageKey);
+  if (!participantKey) {
+    participantKey = createParticipantKey();
+    window.localStorage.setItem(storageKey, participantKey);
+  }
+
+  return participantKey;
 }
 
 function setStatus(message, isConnected = false) {
   roomStatus.textContent = message;
   connectionBadge.textContent = isConnected ? "Conectado" : "Desconectado";
   connectionBadge.classList.toggle("connected", isConnected);
+}
+
+function resetChatUi() {
+  chatCount = 0;
+  chatFeed.innerHTML = "";
+  chatEmpty.hidden = false;
+  chatFeed.appendChild(chatEmpty);
+  updateChatState();
 }
 
 function setAudioUi(message, enabled = false) {
@@ -84,8 +156,70 @@ function setAudioUi(message, enabled = false) {
   toggleAudioButton.textContent = enabled ? "Silenciar micro" : "Activar micro";
 }
 
+function stopChallengeTicker() {
+  if (challengeInterval) {
+    window.clearInterval(challengeInterval);
+    challengeInterval = null;
+  }
+}
+
+function renderChallengeUi() {
+  const now = Date.now();
+  const isActive = currentChallenge.active && currentChallenge.endsAt > now;
+  const secondsLeft = isActive ? Math.ceil((currentChallenge.endsAt - now) / 1000) : 0;
+
+  challengeState.textContent = isActive ? "Reto activo" : "Sin reto";
+  challengeState.classList.toggle("connected", isActive);
+  challengeTimer.textContent = formatCountdown(secondsLeft);
+
+  if (isActive) {
+    challengeStatus.textContent = currentChallenge.label
+      ? `Reto en curso: ${currentChallenge.label}. El alumno puede resolver mientras corre el tiempo.`
+      : "Reto en curso. El alumno puede resolver mientras corre el tiempo.";
+  } else {
+    challengeStatus.textContent = "El maestro puede iniciar un temporizador para que el alumno resuelva el ejercicio actual.";
+    currentChallenge.active = false;
+  }
+}
+
+function startChallengeTicker() {
+  stopChallengeTicker();
+  renderChallengeUi();
+
+  if (!currentChallenge.active) {
+    return;
+  }
+
+  challengeInterval = window.setInterval(() => {
+    const now = Date.now();
+    if (currentChallenge.endsAt <= now) {
+      currentChallenge.active = false;
+      renderChallengeUi();
+      stopChallengeTicker();
+      return;
+    }
+
+    renderChallengeUi();
+  }, 250);
+}
+
+function applyChallengeState(challenge = {}) {
+  currentChallenge = {
+    active: Boolean(challenge.active),
+    endsAt: Number(challenge.endsAt || 0),
+    durationSeconds: Number(challenge.durationSeconds || 0),
+    label: challenge.label || ""
+  };
+
+  startChallengeTicker();
+}
+
 function updateChatState() {
   chatState.textContent = chatCount > 0 ? `${chatCount} mensaje${chatCount === 1 ? "" : "s"}` : "Sin mensajes";
+}
+
+function setChatNotice(message) {
+  chatState.textContent = message;
 }
 
 function appendChatMessage(userName, message, isOwnMessage = false) {
@@ -120,8 +254,31 @@ function escapeHtml(text = "") {
   return text.replace(/[&<>"']/g, (char) => map[char]);
 }
 
+function normalizeLatexMath(text = "") {
+  let normalized = String(text || "")
+    .replace(/\\left/g, "")
+    .replace(/\\right/g, "")
+    .replace(/\\\(/g, "")
+    .replace(/\\\)/g, "")
+    .replace(/\$(.+?)\$/g, (_match, inlineMath) => inlineMath);
+
+  latexInlineReplacements.forEach((entry) => {
+    normalized = normalized.replace(entry.pattern, entry.value);
+  });
+
+  normalized = normalized
+    .replace(/\\mathbb\{R\}/g, "R")
+    .replace(/\\mathbb\{N\}/g, "N")
+    .replace(/\\mathbb\{Z\}/g, "Z")
+    .replace(/\\mathbb\{Q\}/g, "Q")
+    .replace(/\\mathbb\{P\}/g, "P")
+    .replace(/\\cdot/g, "·");
+
+  return normalized;
+}
+
 function formatMathText(text = "") {
-  return text
+  return normalizeLatexMath(text)
     .replace(/\^(-?\d+)/g, (_match, exponent) => exponent.split("").map((char) => superscriptMap[char] || char).join(""))
     .replace(/([a-zA-Z)\]])(\d+)/g, (_match, base, exponent) => {
       const renderedExponent = exponent.split("").map((char) => superscriptMap[char] || char).join("");
@@ -198,17 +355,44 @@ function renderAssistantContent(text = "") {
 function sendChatMessage() {
   const userName = landingUserNameInput.value.trim();
   const message = chatInput.value.trim();
-  if (!joinedRoom || !currentRoomId || !userName || !message) {
+  const roomId = currentRoomId || landingRoomIdInput.value.trim();
+
+  if (!userName) {
+    setChatNotice("Escribe tu nombre antes de enviar mensajes.");
     return;
   }
 
-  socket.emit("chat-message", {
-    roomId: currentRoomId,
-    userName,
-    message
-  });
+  if (!roomId || !joinedRoom) {
+    setChatNotice("Primero entra a la sala para usar el chat.");
+    return;
+  }
+
+  if (!message) {
+    setChatNotice("Escribe un mensaje antes de enviarlo.");
+    return;
+  }
+
+  if (!socket.connected) {
+    setChatNotice("El chat no esta conectado en este momento.");
+    return;
+  }
+
   appendChatMessage(userName, message, true);
   chatInput.value = "";
+  setChatNotice("Enviando...");
+
+  socket.emit("chat-message", {
+    roomId,
+    userName,
+    message
+  }, (response) => {
+    if (response?.ok) {
+      setChatNotice("Mensaje enviado.");
+      return;
+    }
+
+    setChatNotice(response?.message || "No se pudo enviar el mensaje.");
+  });
 }
 
 function applyRoleView(role = "") {
@@ -275,6 +459,42 @@ function closePeerConnection() {
 
   remoteParticipantId = "";
   remoteAudio.srcObject = null;
+}
+
+function leaveRoomFlow(options = {}) {
+  const { silent = false } = options;
+
+  if (joinedRoom && socket.connected) {
+    socket.emit("leave-room");
+  }
+
+  joinedRoom = false;
+  currentRoomId = "";
+  localParticipantId = "";
+  currentUserRole = "";
+  remoteParticipantId = "";
+  applyRoleView("");
+  stopChallengeTicker();
+  applyChallengeState({
+    active: false,
+    endsAt: 0,
+    durationSeconds: 0,
+    label: ""
+  });
+  closePeerConnection();
+  stopLocalAudio();
+  drawBoardBackground();
+  lastBoardDataUrl = "";
+  exerciseTitleInput.value = "";
+  exercisePromptInput.value = "";
+  exerciseAnswerInput.value = "";
+  chatInput.value = "";
+  resetChatUi();
+  if (!silent) {
+    setStatus("Saliste de la sala.", false);
+  }
+  setAudioUi("Micro apagado.", false);
+  connectionBadge.textContent = "Desconectado";
 }
 
 async function createPeerConnection(targetId) {
@@ -449,6 +669,17 @@ function syncExerciseContent() {
   });
 }
 
+function syncChallengeState(challenge) {
+  if (!joinedRoom || !currentRoomId || currentUserRole === "student") {
+    return;
+  }
+
+  socket.emit("challenge-update", {
+    roomId: currentRoomId,
+    challenge
+  });
+}
+
 async function runAssistant(action) {
   if (currentUserRole === "student") {
     assistantStatus.textContent = "Solo el maestro puede usar el generador en esta sala.";
@@ -516,8 +747,9 @@ async function runAssistant(action) {
 async function joinRoomFlow() {
   const userName = landingUserNameInput.value.trim();
   const roomId = landingRoomIdInput.value.trim();
+  const participantKey = getParticipantKey(roomId);
 
-  if (!userName || !roomId) {
+  if (!userName || !roomId || !participantKey) {
     setStatus("Necesitas escribir tu nombre y un codigo de sala.", false);
     return;
   }
@@ -526,7 +758,8 @@ async function joinRoomFlow() {
   await ensureLocalAudio();
   socket.emit("join-room", {
     roomId,
-    userName
+    userName,
+    participantKey
   });
   setStatus("Conectando a la sala...", false);
   setAudioUi(
@@ -552,6 +785,10 @@ copyRoomLinkButton.addEventListener("click", async () => {
 
 landingJoinRoomButton.addEventListener("click", async () => {
   await joinRoomFlow();
+});
+
+leaveRoomButton.addEventListener("click", () => {
+  leaveRoomFlow();
 });
 
 clearBoardButton.addEventListener("click", () => {
@@ -580,6 +817,40 @@ clearExerciseButton.addEventListener("click", () => {
   exercisePromptInput.value = "";
   exerciseAnswerInput.value = "";
   syncExerciseContent();
+});
+
+startChallengeButton.addEventListener("click", () => {
+  if (currentUserRole === "student") {
+    return;
+  }
+
+  const minutes = Number(challengeDurationSelect.value || 3);
+  const durationSeconds = minutes * 60;
+  const challenge = {
+    active: true,
+    durationSeconds,
+    endsAt: Date.now() + (durationSeconds * 1000),
+    label: exerciseTitleInput.value.trim() || "Problema actual"
+  };
+
+  applyChallengeState(challenge);
+  syncChallengeState(challenge);
+});
+
+stopChallengeButton.addEventListener("click", () => {
+  if (currentUserRole === "student") {
+    return;
+  }
+
+  const challenge = {
+    active: false,
+    durationSeconds: 0,
+    endsAt: 0,
+    label: exerciseTitleInput.value.trim() || "Problema actual"
+  };
+
+  applyChallengeState(challenge);
+  syncChallengeState(challenge);
 });
 
 sendChatButton.addEventListener("click", () => {
@@ -653,7 +924,7 @@ window.addEventListener("resize", () => {
   }, 120);
 });
 
-socket.on("room-joined", async ({ roomId, participantId, role, participants, boardDataUrl, exerciseContent }) => {
+socket.on("room-joined", async ({ roomId, participantId, role, participants, boardDataUrl, exerciseContent, challenge }) => {
   joinedRoom = true;
   currentRoomId = roomId;
   localParticipantId = participantId;
@@ -662,6 +933,7 @@ socket.on("room-joined", async ({ roomId, participantId, role, participants, boa
   exerciseTitleInput.value = exerciseContent?.title || "";
   exercisePromptInput.value = formatMathText(exerciseContent?.prompt || "");
   exerciseAnswerInput.value = exerciseContent?.answer || "";
+  applyChallengeState(challenge || {});
   setStatus(`Entraste a la sala ${roomId} como ${role === "teacher" ? "maestro" : "estudiante"}.`, true);
   setAudioUi(
     audioEnabled
@@ -689,6 +961,10 @@ socket.on("exercise-update", ({ content }) => {
   exerciseTitleInput.value = content?.title || "";
   exercisePromptInput.value = formatMathText(content?.prompt || "");
   exerciseAnswerInput.value = content?.answer || "";
+});
+
+socket.on("challenge-update", ({ challenge }) => {
+  applyChallengeState(challenge || {});
 });
 
 socket.on("participant-left", () => {
@@ -758,11 +1034,11 @@ applyRoleView("");
 setStatus("Escribe tu nombre y un codigo de sala para empezar.", false);
 setAudioUi("Micro apagado.", false);
 updateChatState();
+renderChallengeUi();
 renderAssistantContent("CONTENIDO\nPulsa un boton para generar contenido.");
 resizeWhiteboard();
 drawBoardBackground();
 
 window.addEventListener("beforeunload", () => {
-  stopLocalAudio();
-  closePeerConnection();
+  leaveRoomFlow({ silent: true });
 });

@@ -628,7 +628,15 @@ function getRoomState(roomId) {
   if (!rooms.has(roomId)) {
     rooms.set(roomId, {
       members: new Map(),
+      teacherKey: "",
+      studentKey: "",
       boardDataUrl: "",
+      challenge: {
+        active: false,
+        endsAt: 0,
+        durationSeconds: 0,
+        label: ""
+      },
       exerciseContent: {
         title: "",
         prompt: "",
@@ -648,29 +656,43 @@ function serializeMembers(room) {
   }));
 }
 
-function removeSocketFromRoom(socket) {
-  const { roomId } = socket.data;
+function removeMemberFromRoom(roomId, memberId, emitEvents = true) {
   if (!roomId || !rooms.has(roomId)) {
     return;
   }
 
   const room = rooms.get(roomId);
-  room.members.delete(socket.id);
+  if (!room.members.has(memberId)) {
+    return;
+  }
 
-  socket.to(roomId).emit("participant-left", {
-    participantId: socket.id
-  });
+  room.members.delete(memberId);
 
-  io.to(roomId).emit("room-members", serializeMembers(room));
+  if (emitEvents) {
+    io.to(roomId).emit("participant-left", {
+      participantId: memberId
+    });
+
+    io.to(roomId).emit("room-members", serializeMembers(room));
+  }
 
   if (room.members.size === 0) {
     rooms.delete(roomId);
   }
 }
 
+function removeSocketFromRoom(socket) {
+  const { roomId } = socket.data;
+  if (!roomId || !rooms.has(roomId)) {
+    return;
+  }
+
+  removeMemberFromRoom(roomId, socket.id, true);
+}
+
 io.on("connection", (socket) => {
-  socket.on("join-room", ({ roomId, userName }) => {
-    if (!roomId || !userName) {
+  socket.on("join-room", ({ roomId, userName, participantKey }) => {
+    if (!roomId || !userName || !participantKey) {
       socket.emit("room-error", {
         message: "Faltan datos para entrar a la sala."
       });
@@ -680,23 +702,40 @@ io.on("connection", (socket) => {
     removeSocketFromRoom(socket);
 
     const room = getRoomState(roomId);
-    if (room.members.size >= 2) {
+    const duplicatedMember = Array.from(room.members.values()).find((member) => member.participantKey === participantKey);
+    if (duplicatedMember) {
+      removeMemberFromRoom(roomId, duplicatedMember.id, true);
+    }
+
+    let role = "";
+    if (!room.teacherKey) {
+      room.teacherKey = participantKey;
+      role = "teacher";
+    } else if (room.teacherKey === participantKey) {
+      role = "teacher";
+    } else if (!room.studentKey) {
+      room.studentKey = participantKey;
+      role = "student";
+    } else if (room.studentKey === participantKey) {
+      role = "student";
+    } else {
       socket.emit("room-error", {
         message: "Esta sala ya tiene un maestro y un estudiante."
       });
       return;
     }
 
-    const role = room.members.size === 0 ? "teacher" : "student";
     socket.join(roomId);
     socket.data.roomId = roomId;
     socket.data.userName = userName;
     socket.data.role = role;
+    socket.data.participantKey = participantKey;
 
     room.members.set(socket.id, {
       id: socket.id,
       name: userName,
-      role
+      role,
+      participantKey
     });
 
     socket.emit("room-joined", {
@@ -705,7 +744,8 @@ io.on("connection", (socket) => {
       role,
       participants: serializeMembers(room),
       boardDataUrl: room.boardDataUrl,
-      exerciseContent: room.exerciseContent
+      exerciseContent: room.exerciseContent,
+      challenge: room.challenge
     });
 
     socket.to(roomId).emit("participant-joined", {
@@ -740,8 +780,14 @@ io.on("connection", (socket) => {
     });
   });
 
-  socket.on("chat-message", ({ roomId, userName, message }) => {
+  socket.on("chat-message", ({ roomId, userName, message }, callback) => {
     if (!roomId || !message) {
+      if (typeof callback === "function") {
+        callback({
+          ok: false,
+          message: "Faltan datos para enviar el mensaje."
+        });
+      }
       return;
     }
 
@@ -751,6 +797,10 @@ io.on("connection", (socket) => {
       message,
       createdAt: new Date().toISOString()
     });
+
+    if (typeof callback === "function") {
+      callback({ ok: true });
+    }
   });
 
   socket.on("board-update", ({ roomId, boardDataUrl }) => {
@@ -789,6 +839,24 @@ io.on("connection", (socket) => {
 
     socket.to(roomId).emit("exercise-update", {
       content: room.exerciseContent
+    });
+  });
+
+  socket.on("challenge-update", ({ roomId, challenge }) => {
+    if (!roomId || !rooms.has(roomId)) {
+      return;
+    }
+
+    const room = rooms.get(roomId);
+    room.challenge = {
+      active: Boolean(challenge?.active),
+      endsAt: Number(challenge?.endsAt || 0),
+      durationSeconds: Number(challenge?.durationSeconds || 0),
+      label: challenge?.label || ""
+    };
+
+    io.to(roomId).emit("challenge-update", {
+      challenge: room.challenge
     });
   });
 

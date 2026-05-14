@@ -187,6 +187,12 @@ h2 {
   border: 1px solid var(--line);
 }
 
+.danger {
+  background: #fff1ef;
+  color: #c2412d;
+  border: 1px solid rgba(194, 65, 45, 0.18);
+}
+
 .join-actions,
 .board-toolbar,
 .generator-actions {
@@ -300,6 +306,48 @@ h2 {
   background: var(--card-soft);
 }
 
+.challenge-card {
+  margin-top: 10px;
+  padding: 16px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--line);
+  background: linear-gradient(180deg, #fff8f2 0%, #fffdf9 100%);
+}
+
+.challenge-toolbar {
+  display: flex;
+  gap: 10px;
+  align-items: end;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+
+.compact-field {
+  min-width: 120px;
+}
+
+.compact-field select {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  padding: 14px 16px;
+  font: inherit;
+  background: white;
+  color: var(--text);
+}
+
+.challenge-timer {
+  margin-top: 14px;
+  padding: 14px 16px;
+  border-radius: var(--radius-md);
+  background: rgba(233, 106, 44, 0.1);
+  color: var(--accent);
+  font-size: clamp(1.5rem, 3vw, 2.2rem);
+  font-weight: 800;
+  text-align: center;
+  letter-spacing: 0.08em;
+}
+
 .assistant-body {
   display: grid;
   gap: 12px;
@@ -370,6 +418,11 @@ body.role-student .teacher-only {
 
   .chat-compose {
     grid-template-columns: 1fr;
+  }
+
+  .challenge-toolbar {
+    flex-direction: column;
+    align-items: stretch;
   }
 
   #whiteboard {

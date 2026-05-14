@@ -32,6 +32,7 @@
         <button class="button primary" id="landing-join-room" type="button">Entrar a sala</button>
         <button class="button secondary" id="copy-room-link" type="button">Copiar link</button>
         <button class="button secondary" id="toggle-audio" type="button">Silenciar micro</button>
+        <button class="button danger" id="leave-room" type="button">Salir de sala</button>
       </div>
       <p class="status-text" id="room-status">Escribe tu nombre y un codigo de sala para empezar.</p>
     </section>
@@ -127,6 +128,31 @@
           <span>Respuesta del alumno</span>
           <textarea id="exercise-answer" rows="7" placeholder="El estudiante puede responder aqui."></textarea>
         </label>
+
+        <div class="challenge-card">
+          <div class="section-head">
+            <div>
+              <p class="eyebrow">Reto</p>
+              <h3>Resolver problema</h3>
+            </div>
+            <span class="status-chip" id="challenge-state">Sin reto</span>
+          </div>
+          <p class="status-text" id="challenge-status">El maestro puede iniciar un temporizador para que el alumno resuelva el ejercicio actual.</p>
+          <div class="challenge-toolbar teacher-only">
+            <label class="field compact-field">
+              <span>Minutos</span>
+              <select id="challenge-duration">
+                <option value="1">1 min</option>
+                <option value="3" selected>3 min</option>
+                <option value="5">5 min</option>
+                <option value="10">10 min</option>
+              </select>
+            </label>
+            <button class="button primary" id="start-challenge" type="button">Iniciar reto</button>
+            <button class="button secondary" id="stop-challenge" type="button">Detener reto</button>
+          </div>
+          <div class="challenge-timer" id="challenge-timer">00:00</div>
+        </div>
 
         <div class="generator-actions teacher-only">
           <button class="button primary" id="sync-exercise" type="button">Actualizar</button>
