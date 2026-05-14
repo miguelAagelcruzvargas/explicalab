@@ -509,6 +509,7 @@ function leaveRoomFlow(options = {}) {
   exerciseAnswerInput.value = "";
   chatInput.value = "";
   resetChatUi();
+  setContextButtonsEnabled(false);
   if (!silent) {
     setStatus("Saliste de la sala.", false);
   }
@@ -755,17 +756,32 @@ async function runAssistant(action) {
       exercisePromptInput.value = formatMathText(exerciseSection ? exerciseSection.body : data.body || exercisePromptInput.value);
       syncExerciseContent();
     }
+
+    // habilitar botones contextuales solo cuando hay un problema generado
+    setContextButtonsEnabled(Boolean(exercisePromptInput.value.trim()));
   } catch (error) {
     assistantMode.textContent = "Modo local";
     assistantTitle.textContent = "Sin respuesta";
     renderAssistantContent(`CONTENIDO\nNo pude generar contenido en este momento.\n\nDETALLE\n${error.message || "Error desconocido."}`);
     assistantStatus.textContent = error.message || "La generacion fallo.";
   } finally {
+    // siempre re-habilitar el botón de generar problema
     quickAiButtons.forEach((button) => {
-      button.disabled = false;
+      if (button.dataset.action === "generate-problem") {
+        button.disabled = false;
+      }
     });
   }
 }
+
+function setContextButtonsEnabled(enabled) {
+  const ids = ["btn-give-hint", "btn-solve-steps", "btn-gen-variant"];
+  ids.forEach(id => {
+    const btn = document.getElementById(id);
+    if (btn) btn.disabled = !enabled;
+  });
+}
+
 
 async function joinRoomFlow() {
   const userName = landingUserNameInput.value.trim();
