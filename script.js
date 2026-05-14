@@ -14,6 +14,11 @@ const workspaceRole = document.getElementById("workspace-role");
 const audioState = document.getElementById("audio-state");
 const audioStatus = document.getElementById("audio-status");
 const remoteAudio = document.getElementById("remote-audio");
+const chatState = document.getElementById("chat-state");
+const chatFeed = document.getElementById("chat-feed");
+const chatEmpty = document.getElementById("chat-empty");
+const chatInput = document.getElementById("chat-input");
+const sendChatButton = document.getElementById("send-chat");
 const assistantMode = document.getElementById("assistant-mode");
 const assistantStatus = document.getElementById("assistant-status");
 const assistantTitle = document.getElementById("assistant-title");
@@ -40,12 +45,13 @@ let currentUserRole = "";
 let localStream = null;
 let peerConnection = null;
 let remoteParticipantId = "";
-let audioEnabled = true;
+let audioEnabled = false;
 let isDrawing = false;
 let lastPoint = null;
 let boardSyncTimeout = null;
 let lastBoardDataUrl = "";
 let resizeTimer = null;
+let chatCount = 0;
 
 const superscriptMap = {
   "0": "⁰",
@@ -76,6 +82,30 @@ function setAudioUi(message, enabled = false) {
   audioState.textContent = enabled ? "Micro activo" : "Micro apagado";
   audioState.classList.toggle("connected", enabled);
   toggleAudioButton.textContent = enabled ? "Silenciar micro" : "Activar micro";
+}
+
+function updateChatState() {
+  chatState.textContent = chatCount > 0 ? `${chatCount} mensaje${chatCount === 1 ? "" : "s"}` : "Sin mensajes";
+}
+
+function appendChatMessage(userName, message, isOwnMessage = false) {
+  const trimmedMessage = String(message || "").trim();
+  if (!trimmedMessage) {
+    return;
+  }
+
+  chatCount += 1;
+  updateChatState();
+  chatEmpty.hidden = true;
+
+  const article = document.createElement("article");
+  article.className = `chat-message${isOwnMessage ? " own" : ""}`;
+  article.innerHTML = `
+    <p class="chat-author">${escapeHtml(userName || "Clase")}</p>
+    <p class="chat-text">${renderMathHtml(trimmedMessage)}</p>
+  `;
+  chatFeed.appendChild(article);
+  chatFeed.scrollTop = chatFeed.scrollHeight;
 }
 
 function escapeHtml(text = "") {
@@ -165,6 +195,22 @@ function renderAssistantContent(text = "") {
   }).join("");
 }
 
+function sendChatMessage() {
+  const userName = landingUserNameInput.value.trim();
+  const message = chatInput.value.trim();
+  if (!joinedRoom || !currentRoomId || !userName || !message) {
+    return;
+  }
+
+  socket.emit("chat-message", {
+    roomId: currentRoomId,
+    userName,
+    message
+  });
+  appendChatMessage(userName, message, true);
+  chatInput.value = "";
+}
+
 function applyRoleView(role = "") {
   currentUserRole = role;
   document.body.classList.remove("role-teacher", "role-student");
@@ -200,7 +246,12 @@ async function ensureLocalAudio() {
     track.enabled = audioEnabled;
   });
 
-  setAudioUi("Micro listo para la sala.", audioEnabled);
+  setAudioUi(
+    audioEnabled
+      ? "Micro listo para la sala."
+      : "Micro listo, pero entra silenciado por defecto.",
+    audioEnabled
+  );
   return localStream;
 }
 
@@ -478,7 +529,12 @@ async function joinRoomFlow() {
     userName
   });
   setStatus("Conectando a la sala...", false);
-  setAudioUi("Conectando micro a la sala...", audioEnabled);
+  setAudioUi(
+    audioEnabled
+      ? "Conectando micro a la sala..."
+      : "Entraras con el micro silenciado.",
+    audioEnabled
+  );
 }
 
 copyRoomLinkButton.addEventListener("click", async () => {
@@ -526,6 +582,17 @@ clearExerciseButton.addEventListener("click", () => {
   syncExerciseContent();
 });
 
+sendChatButton.addEventListener("click", () => {
+  sendChatMessage();
+});
+
+chatInput.addEventListener("keydown", (event) => {
+  if (event.key === "Enter" && !event.shiftKey) {
+    event.preventDefault();
+    sendChatMessage();
+  }
+});
+
 toggleAudioButton.addEventListener("click", async () => {
   try {
     await ensureLocalAudio();
@@ -533,7 +600,12 @@ toggleAudioButton.addEventListener("click", async () => {
     localStream.getAudioTracks().forEach((track) => {
       track.enabled = audioEnabled;
     });
-    setAudioUi(audioEnabled ? "Micro activo." : "Micro silenciado.", audioEnabled);
+    setAudioUi(
+      audioEnabled
+        ? "Micro activado por ti."
+        : "Micro silenciado por ti.",
+      audioEnabled
+    );
   } catch (_error) {
     setAudioUi("No se pudo activar el micro.", false);
   }
@@ -591,7 +663,12 @@ socket.on("room-joined", async ({ roomId, participantId, role, participants, boa
   exercisePromptInput.value = formatMathText(exerciseContent?.prompt || "");
   exerciseAnswerInput.value = exerciseContent?.answer || "";
   setStatus(`Entraste a la sala ${roomId} como ${role === "teacher" ? "maestro" : "estudiante"}.`, true);
-  setAudioUi("Esperando a la otra persona para hablar.", audioEnabled);
+  setAudioUi(
+    audioEnabled
+      ? "Esperando a la otra persona para hablar."
+      : "Entraste con el micro apagado. Activalo solo si quieres hablar.",
+    audioEnabled
+  );
 
   const others = (participants || []).filter((participant) => participant.id !== participantId);
   if (others.length) {
@@ -618,6 +695,15 @@ socket.on("participant-left", () => {
   setStatus("La otra persona salio de la sala.", joinedRoom);
   closePeerConnection();
   audioStatus.textContent = "La otra persona salio de la sala.";
+});
+
+socket.on("chat-message", ({ participantId, userName, message }) => {
+  const isOwnMessage = participantId === localParticipantId;
+  if (isOwnMessage) {
+    return;
+  }
+
+  appendChatMessage(userName, message, false);
 });
 
 socket.on("room-error", ({ message }) => {
@@ -671,6 +757,7 @@ landingRoomIdInput.value = roomFromUrl || createRoomId();
 applyRoleView("");
 setStatus("Escribe tu nombre y un codigo de sala para empezar.", false);
 setAudioUi("Micro apagado.", false);
+updateChatState();
 renderAssistantContent("CONTENIDO\nPulsa un boton para generar contenido.");
 resizeWhiteboard();
 drawBoardBackground();

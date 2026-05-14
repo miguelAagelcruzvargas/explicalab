@@ -90,6 +90,7 @@ h2 {
 
 .join-card,
 .audio-card,
+.chat-card,
 .board-card,
 .generator-card {
   background: var(--card);
@@ -108,6 +109,11 @@ h2 {
 }
 
 .audio-card {
+  padding: 18px;
+  margin-bottom: 18px;
+}
+
+.chat-card {
   padding: 18px;
   margin-bottom: 18px;
 }
@@ -205,6 +211,74 @@ h2 {
   background: #fffdfa;
 }
 
+.chat-feed {
+  display: grid;
+  gap: 10px;
+  max-height: 260px;
+  overflow-y: auto;
+  margin-top: 16px;
+  padding: 4px 2px;
+}
+
+.chat-empty {
+  padding: 14px 16px;
+  border: 1px dashed var(--line);
+  border-radius: var(--radius-md);
+  color: var(--muted);
+  background: var(--card-soft);
+}
+
+.chat-message {
+  max-width: min(100%, 720px);
+  padding: 12px 14px;
+  border-radius: 18px 18px 18px 6px;
+  border: 1px solid var(--line);
+  background: var(--card-soft);
+}
+
+.chat-message.own {
+  margin-left: auto;
+  border-radius: 18px 18px 6px 18px;
+  background: rgba(233, 106, 44, 0.1);
+  border-color: rgba(233, 106, 44, 0.22);
+}
+
+.chat-author {
+  margin: 0 0 4px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.chat-text {
+  margin: 0;
+  line-height: 1.6;
+  color: var(--text);
+}
+
+.chat-compose {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.chat-compose input {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  padding: 14px 16px;
+  font: inherit;
+  background: var(--card-soft);
+  color: var(--text);
+}
+
+.chat-compose input:focus {
+  outline: none;
+  border-color: rgba(233, 106, 44, 0.4);
+  box-shadow: 0 0 0 4px rgba(233, 106, 44, 0.12);
+}
+
 #whiteboard {
   width: 100%;
   min-height: 520px;
@@ -292,6 +366,10 @@ body.role-student .teacher-only {
 
   .button {
     width: 100%;
+  }
+
+  .chat-compose {
+    grid-template-columns: 1fr;
   }
 
   #whiteboard {
