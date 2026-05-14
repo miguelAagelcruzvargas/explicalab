@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ExplicaLab Aula</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">Aula simple</p>
+        <h1>Pizarra y generador de problemas</h1>
+      </div>
+      <span class="role-chip" id="workspace-role">Vista libre</span>
+    </header>
+
+    <section class="join-card">
+      <label class="field">
+        <span>Tu nombre</span>
+        <input id="landing-user-name" type="text" placeholder="Escribe tu nombre">
+      </label>
+      <label class="field">
+        <span>Codigo de sala</span>
+        <input id="landing-room-id" type="text" placeholder="Ejemplo: algebra-101">
+      </label>
+      <div class="join-actions">
+        <button class="button primary" id="landing-join-room" type="button">Entrar a sala</button>
+        <button class="button secondary" id="copy-room-link" type="button">Copiar link</button>
+        <button class="button secondary" id="toggle-audio" type="button">Silenciar micro</button>
+      </div>
+      <p class="status-text" id="room-status">Escribe tu nombre y un codigo de sala para empezar.</p>
+    </section>
+
+    <section class="audio-card">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">Audio</p>
+          <h2>Microfono en tiempo real</h2>
+        </div>
+        <span class="status-chip" id="audio-state">Micro apagado</span>
+      </div>
+      <p class="status-text" id="audio-status">El micro se activa al entrar a la sala. El primero sera maestro y el segundo estudiante.</p>
+      <audio id="remote-audio" autoplay></audio>
+    </section>
+
+    <main class="workspace-grid">
+      <section class="board-card">
+        <div class="section-head">
+          <div>
+            <p class="eyebrow">Pizarra</p>
+            <h2>Explica y dibuja</h2>
+          </div>
+          <span class="status-chip" id="connection-badge">Desconectado</span>
+        </div>
+
+        <div class="board-toolbar">
+          <label class="tool">
+            <span>Color</span>
+            <input id="board-color" type="color" value="#d35400">
+          </label>
+          <label class="tool">
+            <span>Grosor</span>
+            <input id="board-size" type="range" min="2" max="18" value="4">
+          </label>
+          <button class="button secondary" id="clear-board" type="button">Limpiar</button>
+        </div>
+
+        <div class="board-wrap">
+          <canvas id="whiteboard" width="1100" height="560"></canvas>
+        </div>
+      </section>
+
+      <aside class="generator-card">
+        <div class="section-head stacked">
+          <div>
+            <p class="eyebrow">IA</p>
+            <h2>Generador de problemas</h2>
+          </div>
+          <span class="mode-chip" id="assistant-mode">Modo local</span>
+        </div>
+
+        <label class="field">
+          <span>Pedido del profesor</span>
+          <textarea id="teacher-request" rows="5" placeholder="Ejemplo: Genera un problema de polinomios estilo clasico tipo Baldor, nivel intermedio."></textarea>
+        </label>
+
+        <div class="generator-actions">
+          <button class="button primary quick-ai" data-action="generate-problem" type="button">Generar problema</button>
+          <button class="button secondary quick-ai" data-action="give-hint" type="button">Dar pista</button>
+          <button class="button secondary quick-ai" data-action="solve-step-by-step" type="button">Resolver paso a paso</button>
+          <button class="button secondary quick-ai" data-action="generate-variant" type="button">Generar otro parecido</button>
+        </div>
+
+        <label class="field">
+          <span>Titulo del problema</span>
+          <input id="exercise-title" type="text" placeholder="Titulo del problema">
+        </label>
+
+        <label class="field">
+          <span>Problema o enunciado</span>
+          <textarea id="exercise-prompt" rows="8" placeholder="Aqui aparecerá el problema o puedes escribir uno manualmente."></textarea>
+        </label>
+
+        <label class="field">
+          <span>Respuesta del alumno</span>
+          <textarea id="exercise-answer" rows="7" placeholder="El estudiante puede responder aqui."></textarea>
+        </label>
+
+        <div class="generator-actions teacher-only">
+          <button class="button primary" id="sync-exercise" type="button">Actualizar</button>
+          <button class="button secondary" id="clear-exercise" type="button">Limpiar</button>
+        </div>
+
+        <p class="status-text" id="assistant-status">Usa la IA para generar contenido claro con bloques de explicacion, ejercicio, pista y solucion.</p>
+
+        <div class="assistant-output">
+          <h3 id="assistant-title">Asistente listo</h3>
+          <div id="assistant-body" class="assistant-body">Pulsa un boton para generar contenido.</div>
+        </div>
+      </aside>
+    </main>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="script.js"></script>
+</body>
+</html>
